@@ -33,7 +33,15 @@ export async function session() {
 export type Account = NonNullable<Awaited<ReturnType<typeof session>>>;
 export function checkOrigin(request: Request) {
   const origin = request.headers.get("origin");
-  if ((origin && origin !== new URL(request.url).origin) || request.headers.get("sec-fetch-site") === "cross-site") return Response.json({ error: "Forbidden origin." }, { status: 403 });
+  const requestUrl = new URL(request.url);
+  const host = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() || request.headers.get("host");
+  const forwardedProtocol = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const protocol = forwardedProtocol === "https" || forwardedProtocol === "http" ? forwardedProtocol : requestUrl.protocol.slice(0, -1);
+  let expectedOrigin = requestUrl.origin;
+  if (host) {
+    try { expectedOrigin = new URL(`${protocol}://${host}`).origin; } catch {}
+  }
+  if ((origin && origin !== expectedOrigin) || request.headers.get("sec-fetch-site") === "cross-site") return Response.json({ error: "Forbidden origin." }, { status: 403 });
   return null;
 }
 export async function requireApiSession(permission: Permission, request?: Request) {
