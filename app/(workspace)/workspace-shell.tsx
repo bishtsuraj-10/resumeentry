@@ -6,8 +6,11 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import ThemeToggle from "../theme-toggle";
 import AccountMenu from "./account-menu";
 import { useWorkspaceAccount, useCan } from "./workspace-access";
-import { firstDestination, isActiveRoute, visibleNavigation } from "@/lib/workspace-access";
-
+import {
+  firstDestination,
+  isActiveRoute,
+  visibleNavigation,
+} from "@/lib/workspace-access";
 
 function Icon({
   children,
@@ -103,12 +106,15 @@ export default function WorkspaceShell({
   function closeDrawer() {
     drawerRef.current?.close();
   }
-  const isActive = (href: string) =>
-    isActiveRoute(pathname, href);
+  const isActive = (href: string) => isActiveRoute(pathname, href);
   const current =
-    nav
-      .flatMap((group) => group.items)
-      .find(item => isActive(item.href))?.label ?? (pathname === "/no-access" ? "No access" : pathname.startsWith("/users/") ? "User details" : "Settings");
+    nav.flatMap((group) => group.items).find((item) => isActive(item.href))
+      ?.label ??
+    (pathname === "/no-access"
+      ? "No access"
+      : pathname.startsWith("/users/")
+        ? "User details"
+        : "Settings");
 
   const sidebarContent = (
     <>
@@ -152,16 +158,18 @@ export default function WorkspaceShell({
         ))}
       </nav>
       <div className="sidebar-bottom">
-        {can("settings.view") && <Link
-          className={`nav-item ${isActive("/settings") ? "selected" : ""}`}
-          href="/settings"
-          aria-label="Settings"
-          title="Settings"
-          aria-current={isActive("/settings") ? "page" : undefined}
-        >
-          <Icon className="nav-icon">⚙</Icon>
-          <span>Settings</span>
-        </Link>}
+        {can("settings.view") && (
+          <Link
+            className={`nav-item ${isActive("/settings") ? "selected" : ""}`}
+            href="/settings"
+            aria-label="Settings"
+            title="Settings"
+            aria-current={isActive("/settings") ? "page" : undefined}
+          >
+            <Icon className="nav-icon">⚙</Icon>
+            <span>Settings</span>
+          </Link>
+        )}
         <div className="storage-card">
           <span>Resume files are stored privately.</span>
         </div>
@@ -173,13 +181,15 @@ export default function WorkspaceShell({
             <b title={account.email}>{account.email}</b>
             <span>{account.role}</span>
           </div>
-          {can("settings.view") && <Link
-            href="/settings"
-            className="more-button"
-            aria-label="Account options"
-          >
-            ···
-          </Link>}
+          {can("settings.view") && (
+            <Link
+              href="/settings"
+              className="more-button"
+              aria-label="Account options"
+            >
+              ···
+            </Link>
+          )}
         </div>
       </div>
     </>
@@ -270,13 +280,15 @@ export default function WorkspaceShell({
           </div>
           <div className="top-actions">
             <ThemeToggle />
-            {can("batches.view") && <Link
-              href="/batches"
-              className="icon-button notification"
-              aria-label="Processing activity"
-            >
-              ♧<i />
-            </Link>}
+            {can("batches.view") && (
+              <Link
+                href="/batches"
+                className="icon-button notification"
+                aria-label="Processing activity"
+              >
+                ♧<i />
+              </Link>
+            )}
             <div className="top-divider" />
             <AccountMenu account={account} />
           </div>
@@ -292,13 +304,15 @@ export default function WorkspaceShell({
             {children}
             <footer className="page-footer">
               <span>© 2026 Talentflow, Inc.</span>
-              {can("settings.view") && <div>
-                <Link href="/settings">Help center</Link>
-                <Link href="/settings">Privacy</Link>
-                <Link href="/settings">
-                  System status <i className="live-dot" />
-                </Link>
-              </div>}
+              {can("settings.view") && (
+                <div>
+                  <Link href="/settings">Help center</Link>
+                  <Link href="/settings">Privacy</Link>
+                  <Link href="/settings">
+                    System status <i className="live-dot" />
+                  </Link>
+                </div>
+              )}
             </footer>
           </div>
         </div>
