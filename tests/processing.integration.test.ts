@@ -534,14 +534,23 @@ describe.skipIf(!url)(
     it("defers real BullMQ scheduling while Redis is initially unavailable", async () => {
       const r = await make();
       const connection = new IORedis("redis://127.0.0.1:55440", {
-        lazyConnect: true, enableOfflineQueue: false, maxRetriesPerRequest: 1, retryStrategy: () => null,
+        lazyConnect: true,
+        enableOfflineQueue: false,
+        maxRetriesPerRequest: 1,
+        retryStrategy: () => null,
       });
       connection.on("error", () => {});
-      const queue = new RedisQueue("m1-unavailable-" + randomUUID(), { connection, skipWaitingForReady: true, skipVersionCheck: true });
+      const queue = new RedisQueue("m1-unavailable-" + randomUUID(), {
+        connection,
+        skipWaitingForReady: true,
+        skipVersionCheck: true,
+      });
       queue.on("error", () => {});
       try {
         expect(await scheduleResume(db, queue, r.id)).toBe("deferred");
-        expect(await db.resume.findUnique({ where: { id: r.id } })).toMatchObject({ status: "PENDING" });
+        expect(
+          await db.resume.findUnique({ where: { id: r.id } }),
+        ).toMatchObject({ status: "PENDING" });
       } finally {
         connection.disconnect();
         await queue.close().catch(() => {});

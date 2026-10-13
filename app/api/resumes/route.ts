@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requireApiSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { publicResume } from "@/lib/candidate-http";
 
 const querySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -66,15 +67,13 @@ export async function GET(request: Request) {
     }),
     db.resume.count({ where }),
   ]);
-  return Response.json({
-    items: items.map((resume) => ({
-      ...Object.fromEntries(
-        Object.entries(resume).filter(([key]) => key !== "filePath"),
-      ),
-      fileSize: Number(resume.fileSize),
-    })),
-    total,
-    page,
-    pages: Math.ceil(total / limit),
-  });
+  return Response.json(
+    {
+      items: items.map(publicResume),
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+    },
+    { headers: { "cache-control": "no-store" } },
+  );
 }

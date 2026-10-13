@@ -3,6 +3,8 @@ import { requireApiSession, session } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { saveReview } from "@/lib/processing";
 import { parsePhoneNumberFromString } from "libphonenumber-js/max";
+import { candidateInclude } from "@/lib/candidate-data";
+import { publicResume } from "@/lib/candidate-http";
 
 const updateSchema = z.object({
   name: z.string().trim().max(200).nullable(),
@@ -21,15 +23,13 @@ export async function GET(
     where: { id },
     include: {
       extraction: true,
+      candidate: { include: candidateInclude },
       errors: { orderBy: { createdAt: "desc" }, take: 5 },
     },
   });
   return resume
-    ? Response.json({
-        ...Object.fromEntries(
-          Object.entries(resume).filter(([key]) => key !== "filePath"),
-        ),
-        fileSize: Number(resume.fileSize),
+    ? Response.json(publicResume(resume), {
+        headers: { "cache-control": "no-store" },
       })
     : Response.json({ error: "Resume not found." }, { status: 404 });
 }

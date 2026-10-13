@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { Prisma, type PrismaClient, type ResumeStatus } from "@prisma/client";
+import {
+  Prisma,
+  type PrismaClient,
+  type ResumeStatus,
+  type ExtractionMethod,
+} from "@prisma/client";
 import type { ResumeExtraction } from "./resume-parser";
 
 export const terminalStatuses: ResumeStatus[] = [
@@ -133,6 +138,11 @@ export async function finalizeResume(
   token: string,
   extraction: ResumeExtraction,
   requiresReview: boolean,
+  provenance?: {
+    parserVersion: string;
+    startedAt: Date;
+    method?: ExtractionMethod;
+  },
 ) {
   return transaction(db, async (tx) => {
     const result = await tx.resume.updateMany({
@@ -199,6 +209,32 @@ export async function finalizeResume(
         update: {},
       });
     await reconcileBatch(tx, resume.batchId);
+    await tx.extractionRun.create({
+      data: {
+        resumeId: id,
+        method: provenance?.method ?? "LOCAL",
+        parserVersion: provenance?.parserVersion ?? "local-basic-v1",
+        startedAt: provenance?.startedAt ?? new Date(),
+        completedAt: new Date(),
+        evidence: {
+          create: [
+            { fieldPath: "basic.name", confidence: extraction.nameConfidence },
+            {
+              fieldPath: "basic.email",
+              confidence: extraction.emailConfidence,
+            },
+            {
+              fieldPath: "basic.phone",
+              confidence: extraction.phoneConfidence,
+            },
+            {
+              fieldPath: "basic.designation",
+              confidence: extraction.designationConfidence,
+            },
+          ],
+        },
+      },
+    });
     return true;
   });
 }
@@ -428,8 +464,23 @@ export async function saveReview(
       update: { ...data, requiresReview: false, reviewedAt: new Date() },
     });
     await reconcileBatch(tx, resume.batchId);
-    await tx.auditLog.create({
+    const audit = await tx.auditLog.create({
       data: { actor, action: "resume.reviewed", targetId: id },
+    });
+    await tx.extractionRun.create({
+      data: {
+        resumeId: id,
+        method: "HUMAN",
+        startedAt: extraction.reviewedAt!,
+        completedAt: extraction.reviewedAt!,
+        evidence: {
+          create: ["name", "email", "phone", "designation"].map((field) => ({
+            fieldPath: "basic." + field,
+            verifiedAt: extraction.reviewedAt,
+            auditLogId: audit.id,
+          })),
+        },
+      },
     });
     return extraction;
   });

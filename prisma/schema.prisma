@@ -74,6 +74,8 @@ model Resume {
   batchId     String?
   batch       ProcessingBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
   extraction  ResumeExtraction?
+  candidate   CandidateProfile?
+  extractionRuns ExtractionRun[]
   duplicateOf String?
   duplicates  Duplicate[] @relation("OriginalResume")
   errors      ExtractionError[]
@@ -174,7 +176,264 @@ model AuditLog {
   targetId  String?
   metadata  Json?
   createdAt DateTime @default(now())
+  candidateEvidence CandidateEvidence[]
 
   @@index([createdAt])
   @@index([action, createdAt])
+}
+
+enum ExtractionMethod {
+  LOCAL
+  HYBRID
+  HUMAN
+  IMPORT
+}
+
+enum CandidateLinkType {
+  LINKEDIN
+  GITHUB
+  PORTFOLIO
+  WEBSITE
+  OTHER
+}
+
+enum CandidateAdditionalType {
+  LANGUAGE
+  AWARD
+  PUBLICATION
+  VOLUNTEERING
+  INTERNSHIP
+  QUALIFICATION
+}
+
+model CandidateProfile {
+  resumeId String @id
+  resume Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  revision Int @default(0)
+  firstName String?
+  lastName String?
+  additionalEmails String[] @default([])
+  additionalPhones Json @default("[]")
+  city String?
+  region String?
+  country String?
+  locationText String?
+  dateOfBirth DateTime? @db.Date
+  headline String?
+  summary String?
+  objective String?
+  totalExperienceMonths Int?
+  noticePeriod String?
+  employmentPreferences String[] @default([])
+  verifiedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  skills ResumeSkill[]
+  employment CandidateEmployment[]
+  education CandidateEducation[]
+  projects CandidateProject[]
+  certifications CandidateCertification[]
+  links CandidateLink[]
+  additional CandidateAdditional[]
+
+  @@index([city, country])
+  @@index([totalExperienceMonths])
+}
+
+model Skill {
+  id String @id @default(cuid())
+  canonicalName String
+  normalizedName String @unique
+  category String?
+  terms SkillTerm[]
+  resumes ResumeSkill[]
+  projects ProjectSkill[]
+  createdAt DateTime @default(now())
+}
+
+// Canonical names and aliases share one namespace; an alias cannot name two skills.
+model SkillTerm {
+  normalizedName String @id
+  displayName String
+  skillId String
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  @@index([skillId])
+}
+
+model ResumeSkill {
+  resumeId String
+  skillId String
+  candidate CandidateProfile @relation(fields: [resumeId], references: [resumeId], onDelete: Cascade)
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Restrict)
+  originalText String?
+  context String?
+  confidence Float?
+  verifiedAt DateTime?
+  @@id([resumeId, skillId])
+  @@index([skillId, resumeId])
+}
+
+model CandidateEmployment {
+  id String @id @default(cuid())
+  resumeId String
+  candidate CandidateProfile @relation(fields: [resumeId], references: [resumeId], onDelete: Cascade)
+  position Int
+  employer String?
+  designation String?
+  location String?
+  employmentType String?
+  startYear Int?
+  startMonth Int?
+  startDay Int?
+  startText String?
+  endYear Int?
+  endMonth Int?
+  endDay Int?
+  endText String?
+  isCurrent Boolean?
+  description String?
+  responsibilities String[] @default([])
+  achievements String[] @default([])
+  confidence Float?
+  verifiedAt DateTime?
+  @@unique([resumeId, position])
+  @@unique([resumeId, id])
+  @@index([employer])
+  @@index([resumeId, startYear, startMonth])
+}
+
+model CandidateEducation {
+  id String @id @default(cuid())
+  resumeId String
+  candidate CandidateProfile @relation(fields: [resumeId], references: [resumeId], onDelete: Cascade)
+  position Int
+  degree String?
+  fieldOfStudy String?
+  institution String?
+  location String?
+  startYear Int?
+  startMonth Int?
+  startDay Int?
+  startText String?
+  endYear Int?
+  endMonth Int?
+  endDay Int?
+  endText String?
+  grade String?
+  gradeScale String?
+  description String?
+  confidence Float?
+  verifiedAt DateTime?
+  @@unique([resumeId, position])
+  @@index([degree, fieldOfStudy])
+}
+
+model CandidateProject {
+  id String @id @default(cuid())
+  resumeId String
+  candidate CandidateProfile @relation(fields: [resumeId], references: [resumeId], onDelete: Cascade)
+  position Int
+  name String?
+  description String?
+  role String?
+  startYear Int?
+  startMonth Int?
+  startDay Int?
+  startText String?
+  endYear Int?
+  endMonth Int?
+  endDay Int?
+  endText String?
+  url String?
+  responsibilities String[] @default([])
+  achievements String[] @default([])
+  confidence Float?
+  verifiedAt DateTime?
+  skills ProjectSkill[]
+  @@unique([resumeId, position])
+}
+
+model ProjectSkill {
+  projectId String
+  skillId String
+  project CandidateProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Restrict)
+  @@id([projectId, skillId])
+  @@index([skillId])
+}
+
+model CandidateCertification {
+  id String @id @default(cuid())
+  resumeId String
+  candidate CandidateProfile @relation(fields: [resumeId], references: [resumeId], onDelete: Cascade)
+  position Int
+  name String?
+  issuer String?
+  credentialId String?
+  issueYear Int?
+  issueMonth Int?
+  issueDay Int?
+  issueText String?
+  expiryYear Int?
+  expiryMonth Int?
+  expiryDay Int?
+  expiryText String?
+  url String?
+  confidence Float?
+  verifiedAt DateTime?
+  @@unique([resumeId, position])
+}
+
+model CandidateLink {
+  id String @id @default(cuid())
+  resumeId String
+  candidate CandidateProfile @relation(fields: [resumeId], references: [resumeId], onDelete: Cascade)
+  type CandidateLinkType
+  url String
+  label String?
+  verifiedAt DateTime?
+  @@unique([resumeId, url])
+}
+
+// Typed, bounded JSON for less common information avoids many sparse tables.
+model CandidateAdditional {
+  id String @id @default(cuid())
+  resumeId String
+  candidate CandidateProfile @relation(fields: [resumeId], references: [resumeId], onDelete: Cascade)
+  position Int
+  type CandidateAdditionalType
+  title String?
+  details Json?
+  confidence Float?
+  verifiedAt DateTime?
+  @@unique([resumeId, position])
+}
+
+model ExtractionRun {
+  id String @id @default(cuid())
+  resumeId String
+  resume Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  parserVersion String?
+  method ExtractionMethod
+  startedAt DateTime
+  completedAt DateTime?
+  evidence CandidateEvidence[]
+  @@index([resumeId, startedAt])
+}
+
+// Evidence is private and read separately with edit permission.
+// fieldPath describes a field/section, not a storage path or full document copy.
+model CandidateEvidence {
+  id String @id @default(cuid())
+  runId String
+  run ExtractionRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  fieldPath String
+  sourceSection String?
+  text String?
+  location Json?
+  confidence Float?
+  verifiedAt DateTime?
+  auditLogId String?
+  auditLog AuditLog? @relation(fields: [auditLogId], references: [id], onDelete: SetNull)
+  @@index([runId, fieldPath])
 }

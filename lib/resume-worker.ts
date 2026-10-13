@@ -56,6 +56,7 @@ export async function runResumeJob(
     if (!(await check())) return "skipped";
     if (!text.trim()) throw new PermanentProcessingError("EMPTY_DOCUMENT");
     const extraction = extractResumeFields(text, resume.fileName);
+    let assisted = false;
     try {
       const ai =
         extraction.nameConfidence < 0.6 ||
@@ -63,10 +64,12 @@ export async function runResumeJob(
           ? await aiParser.parseResume(text)
           : {};
       if (ai.name && extraction.nameConfidence < 0.6) {
+        assisted = true;
         extraction.name = ai.name;
         extraction.nameConfidence = 0.8;
       }
       if (ai.designation && extraction.designationConfidence < 0.6) {
+        assisted = true;
         extraction.designation = ai.designation;
         extraction.designationConfidence = 0.8;
       }
@@ -95,6 +98,11 @@ export async function runResumeJob(
       token,
       extraction,
       requiresReview,
+      {
+        parserVersion: "local-basic-v1",
+        startedAt: resume.updatedAt,
+        method: assisted ? "HYBRID" : "LOCAL",
+      },
     );
     if (finalized)
       console.info(

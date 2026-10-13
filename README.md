@@ -66,6 +66,8 @@ Remote AI now also requires explicit `AI_PARSING_ENABLED=true`. It is disabled b
 
 See [M1 worker reliability](docs/M1-worker-reliability.md) for migration rollout, processing ownership, queue recovery, batch accounting, isolated database tests, and outage verification.
 
+See [M2 candidate data](docs/M2-candidate-data.md) for structured candidate models, validated persistence APIs, private provenance, compatibility, migration rollout, and database tests.
+
 ## Run with Docker Compose
 
 1. Complete the configuration above and make sure `.env` exists.
