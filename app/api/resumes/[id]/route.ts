@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requireApiSession, session } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { saveReview } from "@/lib/processing";
 import { parsePhoneNumberFromString } from "libphonenumber-js/max";
 
 const updateSchema = z.object({
@@ -51,56 +52,23 @@ export async function PATCH(
   if (!resume)
     return Response.json({ error: "Resume not found." }, { status: 404 });
   const data = parsed.data;
-  const confidence = {
-    nameConfidence: data.name ? 1 : 0,
-    emailConfidence: data.email ? 1 : 0,
-    phoneConfidence: data.phone ? 1 : 0,
-    designationConfidence: data.designation ? 1 : 0,
-  };
-  const overallConfidence =
-    (confidence.nameConfidence +
-      confidence.emailConfidence +
-      confidence.phoneConfidence +
-      confidence.designationConfidence) /
-    4;
   const parsedPhone = data.phone
     ? parsePhoneNumberFromString(data.phone, "IN")
     : undefined;
-  const extraction = await db.resumeExtraction.upsert({
-    where: { resumeId: id },
-    create: {
-      resumeId: id,
-      name: data.name,
-      email: data.email?.toLowerCase() ?? null,
-      phone: parsedPhone?.formatInternational() ?? data.phone,
-      normalizedPhone: parsedPhone?.isValid() ? parsedPhone.number : null,
-      countryCode: parsedPhone?.countryCallingCode
-        ? `+${parsedPhone.countryCallingCode}`
-        : null,
-      designation: data.designation,
-      ...confidence,
-      overallConfidence,
-      requiresReview: false,
-      reviewedAt: new Date(),
-    },
-    update: {
-      name: data.name,
-      email: data.email?.toLowerCase() ?? null,
-      phone: parsedPhone?.formatInternational() ?? data.phone,
-      normalizedPhone: parsedPhone?.isValid() ? parsedPhone.number : null,
-      countryCode: parsedPhone?.countryCallingCode
-        ? `+${parsedPhone.countryCallingCode}`
-        : null,
-      designation: data.designation,
-      ...confidence,
-      overallConfidence,
-      requiresReview: false,
-      reviewedAt: new Date(),
-    },
+  const extraction = await saveReview(db, id, actor, {
+    name: data.name,
+    email: data.email?.toLowerCase() ?? null,
+    phone: parsedPhone?.formatInternational() ?? data.phone,
+    normalizedPhone: parsedPhone?.isValid() ? parsedPhone.number : null,
+    countryCode: parsedPhone?.countryCallingCode
+      ? `+${parsedPhone.countryCallingCode}`
+      : null,
+    designation: data.designation,
   });
-  await db.resume.update({ where: { id }, data: { status: "COMPLETED" } });
-  await db.auditLog.create({
-    data: { actor, action: "resume.reviewed", targetId: id },
-  });
+  if (!extraction)
+    return Response.json(
+      { error: "Cancelled resumes cannot be reviewed." },
+      { status: 409 },
+    );
   return Response.json(extraction);
 }

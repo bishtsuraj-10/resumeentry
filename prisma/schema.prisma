@@ -65,6 +65,11 @@ model Resume {
   fileSize    BigInt
   fileHash    String
   status      ResumeStatus @default(PENDING)
+  claimToken  String?
+  leaseUntil  DateTime?
+  processingGeneration Int @default(0)
+  processingAttempts Int @default(0)
+  scheduleAfter DateTime @default(now())
   processedAt DateTime?
   batchId     String?
   batch       ProcessingBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
@@ -76,6 +81,8 @@ model Resume {
   updatedAt   DateTime @updatedAt
 
   @@index([status, createdAt])
+  @@index([status, scheduleAfter])
+  @@index([status, leaseUntil])
   @@index([batchId, status])
   @@index([fileHash])
   @@index([processedAt])

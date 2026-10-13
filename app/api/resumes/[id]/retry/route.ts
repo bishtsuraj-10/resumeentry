@@ -1,6 +1,8 @@
 import { requireApiSession, session } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getResumeQueue } from "@/lib/queue";
+import { retryResume } from "@/lib/processing";
+import { scheduleResume } from "@/lib/processing-queue";
 export async function POST(
   request: Request,
   context: RouteContext<"/api/resumes/[id]/retry">,
@@ -18,29 +20,19 @@ export async function POST(
       { error: "Only failed resumes can be retried." },
       { status: 409 },
     );
-  if (resume.status === "FAILED" && resume.batchId)
-    await db.$transaction([
-      db.resume.update({
-        where: { id },
-        data: { status: "PENDING", processedAt: null },
-      }),
-      db.processingBatch.update({
-        where: { id: resume.batchId },
-        data: { processedFiles: { decrement: 1 }, status: "PROCESSING" },
-      }),
-    ]);
-  else
-    await db.resume.update({
-      where: { id },
-      data: { status: "PENDING", processedAt: null },
-    });
-  await getResumeQueue().add(
-    "process-resume",
-    { resumeId: id },
-    { jobId: `${id}-${Date.now()}`, attempts: 3 },
+  const retried = await retryResume(db, id, actor);
+  if (!retried)
+    return Response.json(
+      { error: "Resume is no longer eligible for retry." },
+      { status: 409 },
+    );
+  const scheduling = await scheduleResume(db, getResumeQueue(), id);
+  return Response.json(
+    {
+      queued: scheduling === "queued",
+      deferred: scheduling === "deferred",
+      accepted: true,
+    },
+    { status: 202 },
   );
-  await db.auditLog.create({
-    data: { actor, action: "resume.retried", targetId: id },
-  });
-  return Response.json({ queued: true }, { status: 202 });
 }

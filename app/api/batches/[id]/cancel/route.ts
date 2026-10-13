@@ -1,6 +1,6 @@
 import { requireApiSession, session } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getResumeQueue } from "@/lib/queue";
+import { cancelBatch } from "@/lib/processing";
 
 export async function POST(
   request: Request,
@@ -19,41 +19,12 @@ export async function POST(
       { error: `Batch is already ${batch.status.toLowerCase()}.` },
       { status: 409 },
     );
-  const pending = await db.resume.findMany({
-    where: { batchId: id, status: "PENDING" },
-    select: { id: true },
-  });
-  const queue = getResumeQueue();
-  await Promise.all(
-    pending.map(async ({ id: resumeId }) => {
-      const job = await queue.getJob(resumeId);
-      if (!job) return;
-      const state = await job.getState();
-      if (["waiting", "delayed", "paused", "waiting-children"].includes(state))
-        await job.remove();
-    }),
-  );
-  const cancelled = await db.resume.updateMany({
-    where: { batchId: id, status: "PENDING" },
-    data: { status: "CANCELLED", processedAt: new Date() },
-  });
-  await db.processingBatch.update({
-    where: { id },
-    data: { status: "CANCELLED" },
-  });
-  await db.auditLog.create({
-    data: {
-      actor,
-      action: "batch.cancelled",
-      targetId: id,
-      metadata: { cancelledResumes: cancelled.count },
-    },
-  });
-  return Response.json({
-    cancelled: cancelled.count,
-    running: Math.max(
-      0,
-      batch.totalFiles - batch.processedFiles - cancelled.count,
-    ),
-  });
+  const cancelled = await cancelBatch(db, id, actor);
+  if (cancelled === null)
+    return Response.json(
+      { error: "Batch is already terminal." },
+      { status: 409 },
+    );
+  // Remaining jobs are harmless: their database claims are now ineligible.
+  return Response.json({ cancelled, running: 0 });
 }

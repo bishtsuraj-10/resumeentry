@@ -305,7 +305,13 @@ export class ConfiguredAIParser implements ResumeAIParser {
     const provider = process.env.AI_PROVIDER;
     const apiKey = process.env.AI_API_KEY;
     const endpoint = process.env.AI_API_URL;
-    if (!provider || !apiKey || !endpoint) return {};
+    if (
+      process.env.AI_PARSING_ENABLED !== "true" ||
+      !provider ||
+      !apiKey ||
+      !endpoint
+    )
+      return {};
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {

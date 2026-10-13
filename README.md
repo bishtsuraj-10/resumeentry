@@ -62,6 +62,10 @@ Set `SEED_ADMIN_EMAIL` to the administrator email and `SEED_ADMIN_PASSWORD_HASH`
 
 The optional AI adapter only assists with low-confidence name and designation extraction. Its request includes resume text; configure it only with a provider approved to process that data. Parsing continues without AI when these settings are absent.
 
+Remote AI now also requires explicit `AI_PARSING_ENABLED=true`. It is disabled by default, including when provider credentials are present.
+
+See [M1 worker reliability](docs/M1-worker-reliability.md) for migration rollout, processing ownership, queue recovery, batch accounting, isolated database tests, and outage verification.
+
 ## Run with Docker Compose
 
 1. Complete the configuration above and make sure `.env` exists.

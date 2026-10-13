@@ -134,7 +134,7 @@ export default function BatchesPage() {
                             );
                             setMessage(
                               response.ok
-                                ? "Batch cancelled. Active resumes will finish."
+                                ? "Batch cancelled. Pending and active resumes were cancelled."
                                 : "Could not cancel this batch.",
                             );
                             await reload();
