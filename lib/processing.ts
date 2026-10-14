@@ -8,6 +8,7 @@ import {
 import type { ResumeExtraction } from "./resume-parser";
 import type { StructuredExtraction } from "./resume-parser/index";
 import { persistStructured } from "./resume-parser/persistence";
+import { reviewDecision } from "./resume-parser/review-policy";
 
 export const terminalStatuses: ResumeStatus[] = [
   "COMPLETED",
@@ -144,7 +145,6 @@ export async function finalizeResume(
   id: string,
   token: string,
   extraction: ResumeExtraction,
-  requiresReview: boolean,
   provenance?: {
     parserVersion: string;
     startedAt: Date;
@@ -159,7 +159,8 @@ export async function finalizeResume(
         extraction: { isNot: { reviewedAt: { not: null } } },
       },
       data: {
-        status: requiresReview ? "REVIEW" : "COMPLETED",
+        // Acquire the existing fence; the final status is decided after persistence.
+        status: "REVIEW",
         claimToken: null,
         leaseUntil: null,
         processedAt: new Date(),
@@ -191,8 +192,8 @@ export async function finalizeResume(
       : null;
     await tx.resumeExtraction.upsert({
       where: { resumeId: id },
-      create: { resumeId: id, ...extraction, requiresReview },
-      update: { ...extraction, requiresReview },
+      create: { resumeId: id, ...extraction, requiresReview: true },
+      update: { ...extraction, requiresReview: true },
     });
     await tx.resume.update({
       where: { id },
@@ -216,7 +217,6 @@ export async function finalizeResume(
         },
         update: {},
       });
-    await reconcileBatch(tx, resume.batchId);
     const run = await tx.extractionRun.create({
       data: {
         resumeId: id,
@@ -245,6 +245,37 @@ export async function finalizeResume(
     });
     if (provenance?.structured)
       await persistStructured(tx, id, run.id, provenance.structured);
+    const savedExtraction = await tx.resumeExtraction.findUniqueOrThrow({
+      where: { resumeId: id },
+    });
+    const candidate = await tx.candidateProfile.findUnique({
+      where: { resumeId: id },
+      include: { skills: { include: { skill: true } }, links: true },
+    });
+    const decision = reviewDecision(savedExtraction, candidate);
+    await tx.resumeExtraction.update({
+      where: { resumeId: id },
+      data: { requiresReview: decision.requiresReview },
+    });
+    await tx.resume.update({
+      where: { id },
+      data: {
+        status: duplicate
+          ? "DUPLICATE"
+          : decision.requiresReview ? "REVIEW" : "COMPLETED",
+      },
+    });
+    await tx.candidateEvidence.create({
+      data: {
+        runId: run.id,
+        fieldPath: "review.automatic",
+        sourceSection: "review",
+        confidence: savedExtraction.overallConfidence,
+        text: decision.reasons.join(", ") || "AUTOMATIC_COMPLETION_ELIGIBLE",
+        location: { signals: decision.reasons, threshold: decision.threshold },
+      },
+    });
+    await reconcileBatch(tx, resume.batchId);
     return true;
   });
 }

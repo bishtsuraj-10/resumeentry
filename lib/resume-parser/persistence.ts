@@ -241,7 +241,7 @@ export async function persistStructured(
         page: 1,
         lineStart: 1,
         lineEnd: 1,
-        signals: ["REVIEW_REQUIRED"],
+        signals: ["PARSER_WARNING"],
       },
     });
   if (proofs.length) await tx.candidateEvidence.createMany({ data: proofs });

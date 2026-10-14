@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import type { PrismaClient } from "@prisma/client";
 import { extractStructuredResume, LocalResumeParser } from "./resume-parser";
-import { reviewDecision } from "./resume-parser/review-policy";
 import {
   claimResume,
   classifyError,
@@ -70,13 +69,11 @@ export async function runResumeJob(
         extraction.phoneConfidence +
         extraction.designationConfidence) /
       4;
-    const { requiresReview } = reviewDecision(extraction, structured.warnings);
     const finalized = await finalizeResume(
       db,
       resume.id,
       token,
       extraction,
-      requiresReview,
       {
         parserVersion: structured.parserVersion,
         startedAt: resume.updatedAt,

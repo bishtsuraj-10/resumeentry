@@ -387,46 +387,12 @@ export default function ResumeDetail({ id }: { id: string }) {
                   />
                   <Value
                     label="Location"
-                    value={
-                      p?.locationText ||
-                      [p?.city, p?.region, p?.country]
-                        .filter(Boolean)
-                        .join(", ")
-                    }
-                  />
-                  <Value
-                    label="First name"
-                    value={p?.firstName}
-                    path="profile.firstName"
-                  />
-                  <Value
-                    label="Last name"
-                    value={p?.lastName}
-                    path="profile.lastName"
+                    value={p?.locationText}
                   />
                   <Value
                     label="Date of birth"
                     value={p?.dateOfBirth?.slice(0, 10)}
                     path="profile.dateOfBirth"
-                  />
-                  <Value
-                    label="Additional emails"
-                    value={p?.additionalEmails.join(", ")}
-                  />
-                  <Value
-                    label="Additional phones"
-                    value={
-                      p?.additionalPhones && Array.isArray(p.additionalPhones)
-                        ? p.additionalPhones
-                            .map((v) =>
-                              v && typeof v === "object" && !Array.isArray(v)
-                                ? String(v.normalizedPhone ?? "")
-                                : "",
-                            )
-                            .filter(Boolean)
-                            .join(", ")
-                        : null
-                    }
                   />
                 </dl>
                 <ReviewMark verifiedAt={p?.verifiedAt} />
@@ -453,10 +419,6 @@ export default function ResumeDetail({ id }: { id: string }) {
                     contact data remains available above.
                   </Empty>
                 )}
-                <Value
-                  label="Other extracted emails"
-                  value={b?.otherEmails?.join(", ")}
-                />
                 <p className="candidate-muted">
                   {record.fileName} · Optional missing values do not block
                   review.

@@ -71,7 +71,7 @@ describe("deterministic comprehensive extraction", () => {
   });
   it("excludes references, recruiter contacts and reference profile links", () => {
     const r = parse(corpus.find((c) => c.id === "references")!.text);
-    expect(r.basic.otherEmails).toEqual([]);
+    expect(r.basic).not.toHaveProperty("otherEmails");
     expect(r.candidate.links).toBeUndefined();
     expect(r.basic.designation).toBe("Software Engineer");
     expect(
@@ -89,7 +89,7 @@ describe("deterministic comprehensive extraction", () => {
   it("handles Unicode names without inferring nationality", () => {
     const r = parse("Name: José Silva\nEmail: jose@example.com");
     expect(r.basic.name?.toLowerCase()).toBe("josé silva");
-    expect(r.candidate.profile?.country).toBeUndefined();
+    expect(r.candidate.profile ?? {}).not.toHaveProperty("country");
   });
   it("preserves partial dates and merges overlapping monthly periods", () => {
     expect(parseDate("2021")).toEqual({ year: 2021, text: "2021" });

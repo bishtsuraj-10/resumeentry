@@ -136,7 +136,14 @@ async function main() {
         identity: actual["basic.name"],
         designation: actual["basic.designation"],
         warnings: parsed.warnings,
-        review: reviewDecision(parsed.basic, parsed.warnings),
+        // Offline prediction only; production finalization reads these relations
+        // back from the database after applying the first-fill persistence policy.
+        review: reviewDecision(parsed.basic, {
+          locationText: parsed.candidate.profile?.locationText ?? null,
+          summary: parsed.candidate.profile?.summary ?? null,
+          skills: (parsed.candidate.skills?.upsert ?? []).map((skill) => ({ skill: { canonicalName: skill.name } })),
+          links: (parsed.candidate.links?.upsert ?? []).map((link) => ({ url: link.url ?? "" })),
+        }),
         coverage: Object.fromEntries(
           (
             [

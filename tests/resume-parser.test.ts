@@ -73,6 +73,6 @@ describe("resume extraction", () => {
     await sheet.commit(); await workbook.commit();
     const parsed = new ExcelJS.Workbook(); const buffer = Buffer.concat(chunks); await parsed.xlsx.load(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer);
     expect(parsed.getWorksheet("Resumes")?.getRow(2).getCell(3).value).toBe("Casey Jordan");
-    expect(parsed.getWorksheet("Resumes")?.getRow(2).getCell(11).value).toBe(93);
+    expect(parsed.getWorksheet("Resumes")?.getRow(2).getCell(20).value).toBe(93);
   });
 });

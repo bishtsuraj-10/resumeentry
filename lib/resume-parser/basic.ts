@@ -11,7 +11,6 @@ export interface ResumeExtraction {
   name: string | null;
   nameConfidence: number;
   email: string | null;
-  otherEmails: string[];
   emailConfidence: number;
   phone: string | null;
   countryCode: string | null;
@@ -225,7 +224,6 @@ export function extractResumeFields(
     name,
     nameConfidence,
     email,
-    otherEmails: emails.slice(1),
     emailConfidence,
     phone: phone?.formatInternational() ?? null,
     countryCode: phone?.countryCallingCode

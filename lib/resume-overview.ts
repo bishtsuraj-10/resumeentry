@@ -20,13 +20,8 @@ export const resumeOverviewSelect = {
   },
   candidate: {
     select: {
-      firstName: true,
-      lastName: true,
       headline: true,
       locationText: true,
-      city: true,
-      region: true,
-      country: true,
       totalExperienceMonths: true,
       skills: {
         take: 5,
@@ -101,17 +96,10 @@ export function resumeOverview(row: OverviewInput) {
     e = row.extraction,
     education = highestEducation(p?.education ?? []);
   return {
-    name:
-      e?.name ||
-      (!e?.reviewedAt
-        ? [p?.firstName, p?.lastName].filter(Boolean).join(" ") || null
-        : null),
+    name: e?.name || null,
     designation:
       e?.designation || (!e?.reviewedAt ? p?.headline : null) || null,
-    location:
-      p?.locationText ||
-      [p?.city, p?.region, p?.country].filter(Boolean).join(", ") ||
-      null,
+    location: p?.locationText || null,
     totalExperienceMonths: p?.totalExperienceMonths ?? null,
     skills: p?.skills.map((s) => s.skill.canonicalName) ?? [],
     education: education

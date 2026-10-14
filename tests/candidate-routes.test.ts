@@ -15,7 +15,7 @@ import { GET, PATCH } from "../app/api/resumes/[id]/candidate/route";
 import { GET as provenance } from "../app/api/resumes/[id]/candidate/provenance/route";
 
 const context = { params: Promise.resolve({ id: "synthetic-resume" }) };
-const request = (body: unknown = { expectedRevision: 0, profile: { city: "Example" } }) =>
+const request = (body: unknown = { expectedRevision: 0, profile: { locationText: "Example" } }) =>
   new Request("http://localhost/api/resumes/synthetic-resume/candidate", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 beforeEach(() => {
   vi.resetAllMocks();
@@ -55,7 +55,7 @@ describe("candidate API contracts", () => {
     expect(mock.patch.mock.calls[0].slice(1, 3)).toEqual(["synthetic-resume", "synthetic-actor"]);
   });
   it("rejects mass assignment and candidate identifiers", async () => {
-    for (const body of [{ expectedRevision: 0, resumeId: "other", profile: { city: "Injected" } }, { expectedRevision: 0, profile: { claimToken: "injected" } }])
+    for (const body of [{ expectedRevision: 0, resumeId: "other", profile: { locationText: "Injected" } }, { expectedRevision: 0, profile: { claimToken: "injected" } }])
       expect((await PATCH(request(body), context)).status).toBe(400);
   });
   it("returns clear conflicts without echoing submitted data", async () => {

@@ -12,8 +12,8 @@ const base = {
   "basic.email": "alex.morgan@example.com",
   "basic.normalizedPhone": "+919876543210",
   "basic.designation": "Software Engineer",
-  "profile.firstName": "Alex",
-  "profile.lastName": "Morgan",
+
+
   "profile.headline": "Software Engineer",
 };
 export const corpus: CorpusCase[] = [
@@ -26,9 +26,9 @@ export const corpus: CorpusCase[] = [
     expected: {
       ...base,
       "profile.locationText": "Pune, Maharashtra, India",
-      "profile.city": "Pune",
-      "profile.region": "Maharashtra",
-      "profile.country": "India",
+
+
+
       "profile.summary": "Builds web applications for internal operations.",
       "profile.totalExperienceMonths": 36,
       skills: [
@@ -57,8 +57,8 @@ export const corpus: CorpusCase[] = [
       "basic.name": "Maya Reed",
       "basic.email": "maya.reed@example.com",
       "basic.normalizedPhone": "+919876543210",
-      "profile.firstName": "Maya",
-      "profile.lastName": "Reed",
+
+
       "profile.objective":
         "Seeking an entry-level role in software development.",
       skills: ["Python", "SQL"],
@@ -95,8 +95,8 @@ export const corpus: CorpusCase[] = [
       "basic.email": "jamie.blake@example.com",
       "basic.normalizedPhone": "+14155551234",
       "basic.designation": "Data Analyst",
-      "profile.firstName": "Jamie",
-      "profile.lastName": "Blake",
+
+
       "profile.headline": "Data Analyst",
       "profile.totalExperienceMonths": 24,
       skills: ["Excel", "Power BI", "SQL", "Python"],
@@ -114,8 +114,8 @@ export const corpus: CorpusCase[] = [
       "basic.name": "Taylor Lane",
       "basic.email": "taylor.lane@example.com",
       "basic.designation": "Sales Executive",
-      "profile.firstName": "Taylor",
-      "profile.lastName": "Lane",
+
+
       "profile.headline": "Sales Executive",
       skills: [
         "Sales",
@@ -135,8 +135,8 @@ export const corpus: CorpusCase[] = [
       "basic.name": "Robin Hale",
       "basic.email": "robin.hale@example.com",
       "basic.designation": "Hr Manager",
-      "profile.firstName": "Robin",
-      "profile.lastName": "Hale",
+
+
       "profile.headline": "HR Manager",
       "profile.totalExperienceMonths": 36,
       "profile.noticePeriod": "30 days",
@@ -159,8 +159,8 @@ export const corpus: CorpusCase[] = [
       "basic.name": "Samira Noor",
       "basic.email": "samira.noor@example.com",
       "basic.designation": "Accountant",
-      "profile.firstName": "Samira",
-      "profile.lastName": "Noor",
+
+
       "profile.headline": "Accountant",
       skills: ["Accounting", "Tally", "GST", "Excel", "Financial Reporting"],
       "education.degree": ["Bachelor of Commerce"],
@@ -177,8 +177,8 @@ export const corpus: CorpusCase[] = [
       "basic.name": "Dana Wells",
       "basic.email": "dana.wells@example.com",
       "basic.designation": "Registered Nurse",
-      "profile.firstName": "Dana",
-      "profile.lastName": "Wells",
+
+
       "profile.headline": "Registered Nurse",
       "profile.totalExperienceMonths": 60,
       skills: ["Patient Care", "Nursing", "CPR", "Clinical Documentation"],
@@ -271,8 +271,8 @@ export const corpus: CorpusCase[] = [
     expected: {
       "basic.name": "Kai Rivers",
       "basic.email": "kai.rivers@example.com",
-      "profile.firstName": "Kai",
-      "profile.lastName": "Rivers",
+
+
     },
   },
   {
@@ -306,8 +306,8 @@ export const corpus: CorpusCase[] = [
     expected: {
       "basic.name": "Elena Park",
       "basic.email": "elena.park@example.com",
-      "profile.firstName": "Elena",
-      "profile.lastName": "Park",
+
+
       skills: ["JavaScript"],
       "employment.employer": ["Example Co"],
     },
@@ -388,8 +388,8 @@ corpus.push({
     `\nOther Email: alex.other@example.com\nAlternate Phone: +1 415 555 1234\nLinkedIn: linkedin.com/in/synthetic\nGitHub: https://github.com/synthetic\nPortfolio: https://example.com/portfolio`,
   expected: {
     ...base,
-    "basic.otherEmails": ["alex.other@example.com"],
-    "profile.additionalPhones": ["+14155551234"],
+
+
     "links.url": [
       "https://linkedin.com/in/synthetic",
       "https://github.com/synthetic",

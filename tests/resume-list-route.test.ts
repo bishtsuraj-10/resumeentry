@@ -4,8 +4,14 @@ vi.mock("@/lib/auth",()=>({requireApiSession:mock.auth}));
 vi.mock("@/lib/db",()=>({db:{resume:{findMany:mock.list,count:mock.count}}}));
 import { GET } from "../app/api/resumes/route";
 import { resumeOverviewSelect } from "../lib/resume-overview";
-beforeEach(()=>{vi.resetAllMocks();mock.auth.mockResolvedValue(null);mock.count.mockResolvedValue(26);mock.list.mockResolvedValue([{id:"synthetic",fileName:"synthetic.pdf",fileType:"pdf",fileSize:BigInt(1),status:"REVIEW",createdAt:new Date("2026-10-13"),extraction:{name:"Synthetic Person",email:"synthetic@example.com",phone:null,designation:"Engineer",overallConfidence:.94,reviewedAt:null},candidate:{firstName:"Synthetic",lastName:"Person",headline:"Engineer",locationText:"Synthetic City",totalExperienceMonths:36,skills:[{skill:{canonicalName:"Python"}}],education:[{degree:"Master of Science",fieldOfStudy:"Analytics",institution:"Synthetic University",endYear:2020}]}}]);});
+beforeEach(()=>{vi.resetAllMocks();mock.auth.mockResolvedValue(null);mock.count.mockResolvedValue(26);mock.list.mockResolvedValue([{id:"synthetic",fileName:"synthetic.pdf",fileType:"pdf",fileSize:BigInt(1),status:"REVIEW",createdAt:new Date("2026-10-13"),extraction:{name:"Synthetic Person",email:"synthetic@example.com",phone:null,designation:"Engineer",overallConfidence:.94,reviewedAt:null},candidate:{headline:"Engineer",locationText:"Synthetic City",totalExperienceMonths:36,skills:[{skill:{canonicalName:"Python"}}],education:[{degree:"Master of Science",fieldOfStudy:"Analytics",institution:"Synthetic University",endYear:2020}]}}]);});
 describe("recruiter overview query",()=>{
+  it.each(["REVIEW", "COMPLETED"])("uses the %s status for both queue rows and counts", async status => {
+    mock.list.mockResolvedValue([]);
+    await GET(new Request("http://localhost/api/resumes?status=" + status));
+    expect(mock.list.mock.calls[0][0].where).toEqual({ status });
+    expect(mock.count.mock.calls[0][0].where).toEqual({ status });
+  });
   it("selects bounded relations once and excludes full histories and private provenance",async()=>{
     const response=await GET(new Request("http://localhost/api/resumes?page=2&limit=25&status=REVIEW&search=synthetic")),body=await response.json();
     expect(mock.list).toHaveBeenCalledTimes(1);expect(mock.count).toHaveBeenCalledTimes(1);

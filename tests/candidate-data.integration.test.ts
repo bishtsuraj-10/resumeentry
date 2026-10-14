@@ -25,14 +25,14 @@ describe.skipIf(!url)("candidate data PostgreSQL integration", () => {
   });
   it("round trips identity and professional details without generating missing information", async () => {
     const r = await resume();
-    await patch(r.id, { expectedRevision: 0, profile: { firstName: "Synthetic", lastName: null, city: "Example City", region: "Example Region",
-      country: "Example Country", locationText: "Originally supplied", dateOfBirth: "2000-02-29", headline: "Supplied headline",
+    await patch(r.id, { expectedRevision: 0, profile: {
+       locationText: "Originally supplied", dateOfBirth: "2000-02-29", headline: "Supplied headline",
       summary: "Candidate supplied summary", objective: null, totalExperienceMonths: 36, noticePeriod: "30 days",
-      employmentPreferences: ["Remote"], additionalEmails: ["EXTRA@EXAMPLE.COM", "extra@example.com"], additionalPhones: ["+91 98765 43210"] } });
+      employmentPreferences: ["Remote"], } });
     const read = await readCandidate(db(), r.id);
     expect(read?.basic).toBeNull();
-    expect(read?.candidate).toMatchObject({ revision: 1, firstName: "Synthetic", lastName: null, summary: "Candidate supplied summary", objective: null,
-      additionalEmails: ["extra@example.com"], totalExperienceMonths: 36, additionalPhones: [{ originalText: "+91 98765 43210", normalizedPhone: "+919876543210", countryCode: "+91" }] });
+    expect(read?.candidate).toMatchObject({ revision: 1,   summary: "Candidate supplied summary", objective: null,
+       totalExperienceMonths: 36 });
     expect(read?.candidate?.dateOfBirth?.toISOString().slice(0, 10)).toBe("2000-02-29");
   });
   it("stores multiple ordered employment records and lossless partial dates", async () => {
@@ -74,7 +74,7 @@ describe.skipIf(!url)("candidate data PostgreSQL integration", () => {
     const r = await resume(), name = uniqueSkill(), alias = uniqueSkill();
     await patch(r.id, { expectedRevision: 0, skills: { upsert: [{ name, aliases: [alias] }] } });
     const other = await resume();
-    await expect(patch(other.id, { expectedRevision: 0, profile: { city: "Must roll back" }, skills: { upsert: [{ name: uniqueSkill(), aliases: [alias] }] } })).rejects.toMatchObject({ status: 409 });
+    await expect(patch(other.id, { expectedRevision: 0, profile: { locationText: "Must roll back" }, skills: { upsert: [{ name: uniqueSkill(), aliases: [alias] }] } })).rejects.toMatchObject({ status: 409 });
     expect(await db().candidateProfile.findUnique({ where: { resumeId: other.id } })).toBeNull();
     expect(await db().extractionRun.count({ where: { resumeId: other.id } })).toBe(0);
   });
@@ -111,12 +111,12 @@ describe.skipIf(!url)("candidate data PostgreSQL integration", () => {
   });
   it("preserves omitted fields and unrelated relations on partial edits", async () => {
     const r = await resume();
-    await patch(r.id, { expectedRevision: 0, profile: { summary: "Keep summary", city: "Old City" }, employment: { upsert: [{ employer: "Keep employer" }, { employer: "Also keep" }] },
+    await patch(r.id, { expectedRevision: 0, profile: { summary: "Keep summary", locationText: "Old City" }, employment: { upsert: [{ employer: "Keep employer" }, { employer: "Also keep" }] },
       education: { upsert: [{ degree: "Keep degree" }] } });
     const before = (await readCandidate(db(), r.id))!.candidate!;
-    await patch(r.id, { expectedRevision: 1, profile: { city: "New City" }, employment: { upsert: [{ id: before.employment[0].id, designation: "New designation" }] } });
+    await patch(r.id, { expectedRevision: 1, profile: { locationText: "New City" }, employment: { upsert: [{ id: before.employment[0].id, designation: "New designation" }] } });
     const after = (await readCandidate(db(), r.id))!.candidate!;
-    expect(after).toMatchObject({ summary: "Keep summary", city: "New City" });
+    expect(after).toMatchObject({ summary: "Keep summary", locationText: "New City" });
     expect(after.employment.map((e) => e.employer)).toEqual(["Keep employer", "Also keep"]);
     expect(after.education).toHaveLength(1);
   });
@@ -135,22 +135,22 @@ describe.skipIf(!url)("candidate data PostgreSQL integration", () => {
     await patch(r1.id, { expectedRevision: 0, education: { upsert: [{ degree: "Owned" }] } });
     const id = (await readCandidate(db(), r1.id))!.candidate!.education[0].id;
     for (const changes of [{ upsert: [{ id, degree: "Injected" }] }, { remove: [id] }]) {
-      await expect(patch(r2.id, { expectedRevision: 0, profile: { city: "Injected" }, education: changes })).rejects.toMatchObject({ status: 404 });
+      await expect(patch(r2.id, { expectedRevision: 0, profile: { locationText: "Injected" }, education: changes })).rejects.toMatchObject({ status: 404 });
       expect(await db().candidateProfile.findUnique({ where: { resumeId: r2.id } })).toBeNull();
     }
     expect((await readCandidate(db(), r1.id))!.candidate!.education[0].degree).toBe("Owned");
   });
   it("uses optimistic revisions to prevent lost concurrent corrections", async () => {
     const r = await resume();
-    await patch(r.id, { expectedRevision: 0, profile: { city: "Original" } });
-    const updates = await Promise.allSettled([patch(r.id, { expectedRevision: 1, profile: { city: "First" } }), patch(r.id, { expectedRevision: 1, profile: { city: "Second" } })]);
+    await patch(r.id, { expectedRevision: 0, profile: { locationText: "Original" } });
+    const updates = await Promise.allSettled([patch(r.id, { expectedRevision: 1, profile: { locationText: "First" } }), patch(r.id, { expectedRevision: 1, profile: { locationText: "Second" } })]);
     expect(updates.filter((r) => r.status === "fulfilled")).toHaveLength(1);
     expect(updates.filter((r) => r.status === "rejected")).toHaveLength(1);
     expect((await readCandidate(db(), r.id))!.revision).toBe(2);
   });
   it("permits only one concurrent first profile creation", async () => {
     const r = await resume();
-    const updates = await Promise.allSettled([patch(r.id, { expectedRevision: 0, profile: { city: "First" } }), patch(r.id, { expectedRevision: 0, profile: { city: "Second" } })]);
+    const updates = await Promise.allSettled([patch(r.id, { expectedRevision: 0, profile: { locationText: "First" } }), patch(r.id, { expectedRevision: 0, profile: { locationText: "Second" } })]);
     expect(updates.filter((r) => r.status === "fulfilled")).toHaveLength(1);
     expect(updates.filter((r) => r.status === "rejected")).toHaveLength(1);
     expect((await readCandidate(db(), r.id))!.revision).toBe(1);
@@ -172,7 +172,7 @@ describe.skipIf(!url)("candidate data PostgreSQL integration", () => {
     const r = await resume(), claim = await claimResume(db(), r.id, 0);
     await patch(r.id, { expectedRevision: 0, profile: { summary: "Human verified summary" }, skills: { upsert: [{ name: uniqueSkill() }] } });
     const before = (await readCandidate(db(), r.id))!.candidate!;
-    expect(await finalizeResume(db(), r.id, claim!.claimToken!, extractResumeFields("Alex Smith\nSoftware Engineer\nlocal@example.com"), true)).toBe(true);
+    expect(await finalizeResume(db(), r.id, claim!.claimToken!, extractResumeFields("Alex Smith\nSoftware Engineer\nlocal@example.com"))).toBe(true);
     const after = (await readCandidate(db(), r.id))!.candidate!;
     expect(after.summary).toBe(before.summary);
     expect(after.verifiedAt).toEqual(before.verifiedAt);
@@ -191,14 +191,14 @@ describe.skipIf(!url)("candidate data PostgreSQL integration", () => {
   });
   it("does not leak evidence in standard reads and scopes provenance to its resume", async () => {
     const r = await resume(), other = await resume();
-    await patch(r.id, { expectedRevision: 0, profile: { city: "Example", evidence: [{ text: "Private synthetic evidence", sourceSection: "Contact", location: { page: 1 } }] } });
+    await patch(r.id, { expectedRevision: 0, profile: { locationText: "Example", evidence: [{ text: "Private synthetic evidence", sourceSection: "Contact", location: { page: 1 } }] } });
     expect(JSON.stringify(await readCandidate(db(), r.id))).not.toContain("Private synthetic evidence");
     expect(await readCandidateProvenance(db(), other.id)).toEqual([]);
     expect(JSON.stringify(await readCandidateProvenance(db(), r.id))).toContain("Private synthetic evidence");
   });
   it("cascades candidate data and provenance while preserving the shared taxonomy", async () => {
     const r = await resume(), name = uniqueSkill();
-    await patch(r.id, { expectedRevision: 0, profile: { city: "Example" }, skills: { upsert: [{ name }] }, projects: { upsert: [{ name: "Owned", skills: [{ name }] }] },
+    await patch(r.id, { expectedRevision: 0, profile: { locationText: "Example" }, skills: { upsert: [{ name }] }, projects: { upsert: [{ name: "Owned", skills: [{ name }] }] },
       employment: { upsert: [{ employer: "Owned" }] }, education: { upsert: [{ degree: "Owned" }] }, certifications: { upsert: [{ name: "Owned" }] },
       links: { upsert: [{ type: "WEBSITE", url: "https://example.com/cascade" }] }, additional: { upsert: [{ type: "AWARD", title: "Owned" }] } });
     const runIds = (await readCandidateProvenance(db(), r.id)).map((r) => r.id);
@@ -209,7 +209,7 @@ describe.skipIf(!url)("candidate data PostgreSQL integration", () => {
   });
   it("enforces database confidence, partial-date and timestamp integrity", async () => {
     const r = await resume();
-    await patch(r.id, { expectedRevision: 0, profile: { city: "Example" } });
+    await patch(r.id, { expectedRevision: 0, profile: { locationText: "Example" } });
     await expect(db().candidateEmployment.create({ data: { resumeId: r.id, position: 0, startMonth: 1 } })).rejects.toThrow();
     await expect(db().candidateEducation.create({ data: { resumeId: r.id, position: 0, confidence: 2 } })).rejects.toThrow();
     await expect(db().extractionRun.create({ data: { resumeId: r.id, method: "IMPORT", startedAt: new Date(1000), completedAt: new Date(0) } })).rejects.toThrow();
@@ -227,11 +227,11 @@ describe.skipIf(!url)("candidate data PostgreSQL integration", () => {
   it("rejects structured writes to cancelled resumes and batches", async () => {
     const r = await resume();
     await db().resume.update({ where: { id: r.id }, data: { status: "CANCELLED" } });
-    await expect(patch(r.id, { expectedRevision: 0, profile: { city: "Injected" } })).rejects.toMatchObject({ status: 409 });
+    await expect(patch(r.id, { expectedRevision: 0, profile: { locationText: "Injected" } })).rejects.toMatchObject({ status: 409 });
     const b = await db().processingBatch.create({ data: { name: "Synthetic cancelled", status: "CANCELLED" } });
     const other = await resume();
     await db().resume.update({ where: { id: other.id }, data: { batchId: b.id } });
-    await expect(patch(other.id, { expectedRevision: 0, profile: { city: "Injected" } })).rejects.toMatchObject({ status: 409 });
+    await expect(patch(other.id, { expectedRevision: 0, profile: { locationText: "Injected" } })).rejects.toMatchObject({ status: 409 });
   });
   it("retains prior machine confidence while recording human verification separately", async () => {
     const r = await resume();
@@ -245,12 +245,12 @@ describe.skipIf(!url)("candidate data PostgreSQL integration", () => {
   it("rolls back finalization if provenance cannot be stored and never duplicates successful runs", async () => {
     const r = await resume(), claim = await claimResume(db(), r.id, 0);
     const fields = extractResumeFields("Alex Smith\nSoftware Engineer\nrollback@example.com");
-    await expect(finalizeResume(db(), r.id, claim!.claimToken!, fields, true, { parserVersion: "synthetic", startedAt: new Date(), method: "INVALID" as "LOCAL" })).rejects.toThrow();
+    await expect(finalizeResume(db(), r.id, claim!.claimToken!, fields, { parserVersion: "synthetic", startedAt: new Date(), method: "INVALID" as "LOCAL" })).rejects.toThrow();
     expect(await db().resume.findUnique({ where: { id: r.id } })).toMatchObject({ status: "PROCESSING", claimToken: claim!.claimToken });
     expect(await db().resumeExtraction.findUnique({ where: { resumeId: r.id } })).toBeNull();
     expect(await db().extractionRun.count({ where: { resumeId: r.id } })).toBe(0);
-    expect(await finalizeResume(db(), r.id, claim!.claimToken!, fields, true)).toBe(true);
-    expect(await finalizeResume(db(), r.id, claim!.claimToken!, fields, true)).toBe(false);
+    expect(await finalizeResume(db(), r.id, claim!.claimToken!, fields)).toBe(true);
+    expect(await finalizeResume(db(), r.id, claim!.claimToken!, fields)).toBe(false);
     expect(await db().extractionRun.count({ where: { resumeId: r.id } })).toBe(1);
   });
 });

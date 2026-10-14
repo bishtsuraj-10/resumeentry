@@ -98,7 +98,6 @@ model ResumeExtraction {
   name                  String?
   nameConfidence        Float     @default(0)
   email                 String?
-  otherEmails           String[]  @default([])
   emailConfidence       Float     @default(0)
   phone                 String?
   countryCode           String?
@@ -210,13 +209,6 @@ model CandidateProfile {
   resumeId String @id
   resume Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
   revision Int @default(0)
-  firstName String?
-  lastName String?
-  additionalEmails String[] @default([])
-  additionalPhones Json @default("[]")
-  city String?
-  region String?
-  country String?
   locationText String?
   dateOfBirth DateTime? @db.Date
   headline String?
@@ -236,7 +228,6 @@ model CandidateProfile {
   links CandidateLink[]
   additional CandidateAdditional[]
 
-  @@index([city, country])
   @@index([totalExperienceMonths])
 }
 

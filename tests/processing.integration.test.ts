@@ -201,7 +201,7 @@ describe.skipIf(!url)(
       const newer = await claim(r.id);
       expect(newer.claimToken).not.toBe(r.claimToken);
       expect(
-        await finalizeResume(db, r.id, r.claimToken!, extraction(), false),
+        await finalizeResume(db, r.id, r.claimToken!, extraction()),
       ).toBe(false);
       expect(await failResume(db, r.id, r.claimToken!, new Error())).toBe(
         false,
@@ -212,7 +212,6 @@ describe.skipIf(!url)(
           newer.id,
           newer.claimToken!,
           extraction(),
-          false,
         ),
       ).toBe(true);
     });
@@ -220,10 +219,10 @@ describe.skipIf(!url)(
       const b = await batch(),
         r = await claim((await make("PENDING", b.id)).id);
       expect(
-        await finalizeResume(db, r.id, r.claimToken!, extraction(), false),
+        await finalizeResume(db, r.id, r.claimToken!, extraction()),
       ).toBe(true);
       expect(
-        await finalizeResume(db, r.id, r.claimToken!, extraction(), false),
+        await finalizeResume(db, r.id, r.claimToken!, extraction()),
       ).toBe(false);
       expect(await claimResume(db, r.id, 0)).toBeNull();
       expect(
@@ -240,7 +239,7 @@ describe.skipIf(!url)(
     it("counts REVIEW as processed", async () => {
       const b = await batch(),
         r = await claim((await make("PENDING", b.id)).id);
-      await finalizeResume(db, r.id, r.claimToken!, extraction(), true);
+      await finalizeResume(db, r.id, r.claimToken!, extraction());
       expect(await db.resume.findUnique({ where: { id: r.id } })).toMatchObject(
         { status: "REVIEW" },
       );
@@ -254,13 +253,13 @@ describe.skipIf(!url)(
         r2 = await claim((await make("PENDING", b.id)).id);
       const fields = extraction();
       await Promise.all([
-        finalizeResume(db, r1.id, r1.claimToken!, fields, false),
-        finalizeResume(db, r2.id, r2.claimToken!, fields, false),
+        finalizeResume(db, r1.id, r1.claimToken!, fields),
+        finalizeResume(db, r2.id, r2.claimToken!, fields),
       ]);
       const rows = await db.resume.findMany({ where: { batchId: b.id } });
       expect(rows.map((r) => r.status).sort()).toEqual([
-        "COMPLETED",
         "DUPLICATE",
+        "REVIEW",
       ]);
       expect(
         await db.processingBatch.findUnique({ where: { id: b.id } }),
@@ -345,7 +344,7 @@ describe.skipIf(!url)(
         pending = await make("PENDING", b.id);
       expect(await cancelBatch(db, b.id, "test")).toBe(2);
       expect(
-        await finalizeResume(db, r.id, r.claimToken!, extraction(), false),
+        await finalizeResume(db, r.id, r.claimToken!, extraction()),
       ).toBe(false);
       expect(await claimResume(db, pending.id, 0)).toBeNull();
       expect(await saveReview(db, r.id, "test", review)).toBeNull();
@@ -364,7 +363,7 @@ describe.skipIf(!url)(
       expect(saved?.reviewedAt).toBeTruthy();
       expect(saved?.nameConfidence).toBe(0);
       expect(
-        await finalizeResume(db, r.id, r.claimToken!, extraction(), false),
+        await finalizeResume(db, r.id, r.claimToken!, extraction()),
       ).toBe(false);
       expect(
         await db.resumeExtraction.findUnique({ where: { resumeId: r.id } }),
@@ -374,7 +373,7 @@ describe.skipIf(!url)(
       const r = await claim((await make()).id);
       await Promise.all([
         saveReview(db, r.id, "test", review),
-        finalizeResume(db, r.id, r.claimToken!, extraction(), true),
+        finalizeResume(db, r.id, r.claimToken!, extraction()),
       ]);
       expect(
         await db.resumeExtraction.findUnique({ where: { resumeId: r.id } }),
@@ -389,7 +388,6 @@ describe.skipIf(!url)(
           r.id,
           r.claimToken!,
           { ...extraction(), nameConfidence: "invalid" as unknown as number },
-          false,
         ),
       ).rejects.toThrow();
       expect(await db.resume.findUnique({ where: { id: r.id } })).toMatchObject(
@@ -465,14 +463,14 @@ describe.skipIf(!url)(
         r2 = await claim((await make("PENDING", b2.id)).id);
       const fields = extraction();
       await Promise.all([
-        finalizeResume(db, r1.id, r1.claimToken!, fields, false),
-        finalizeResume(db, r2.id, r2.claimToken!, fields, false),
+        finalizeResume(db, r1.id, r1.claimToken!, fields),
+        finalizeResume(db, r2.id, r2.claimToken!, fields),
       ]);
       expect(
         (await db.resume.findMany({ where: { id: { in: [r1.id, r2.id] } } }))
           .map((r) => r.status)
           .sort(),
-      ).toEqual(["COMPLETED", "DUPLICATE"]);
+      ).toEqual(["DUPLICATE", "REVIEW"]);
     });
     it("counts completions at configured default concurrency without exceeding totals", async () => {
       const b = await batch();
@@ -481,7 +479,7 @@ describe.skipIf(!url)(
         rows.push(await claim((await make("PENDING", b.id)).id));
       await Promise.all(
         rows.map((r) =>
-          finalizeResume(db, r.id, r.claimToken!, extraction(), false),
+          finalizeResume(db, r.id, r.claimToken!, extraction()),
         ),
       );
       expect(
@@ -516,7 +514,7 @@ describe.skipIf(!url)(
     });
     it("does not replace verified confidence with synthetic certainty", async () => {
       const r = await claim((await make()).id);
-      await finalizeResume(db, r.id, r.claimToken!, extraction(), true);
+      await finalizeResume(db, r.id, r.claimToken!, extraction());
       const original = await db.resumeExtraction.findUniqueOrThrow({
         where: { resumeId: r.id },
       });

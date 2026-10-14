@@ -108,10 +108,10 @@ describe("review compatibility and precision", () => {
   it("never sends unchanged unrelated values", () =>
     expect(
       changedFields(
-        { summary: "Original", city: "A" },
-        { summary: "Original", city: "B" },
+        { summary: "Original", locationText: "A" },
+        { summary: "Original", locationText: "B" },
       ),
-    ).toEqual({ city: "B" }));
+    ).toEqual({ locationText: "B" }));
   it("formats unknown values and partial dates without inventing precision", () => {
     expect(experienceLabel(null)).toBe("Not identified");
     expect(experienceLabel(125)).toBe("10y 5m");
