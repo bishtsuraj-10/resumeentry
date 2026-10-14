@@ -97,14 +97,16 @@ export default function AccountMenu({
             <strong>{account.email}</strong>
             <span className="account-role">{account.role}</span>
           </div>
-          {can("settings.view") && <Link
-            href="/settings"
-            role="menuitem"
-            className="account-menu-item"
-            onClick={() => close()}
-          >
-            Settings
-          </Link>}
+          {can("settings.view") && (
+            <Link
+              href="/settings"
+              role="menuitem"
+              className="account-menu-item"
+              onClick={() => close()}
+            >
+              Settings
+            </Link>
+          )}
           <SignOutButton
             className="account-menu-item sign-out-menu-item"
             menuItem

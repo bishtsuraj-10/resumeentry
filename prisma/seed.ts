@@ -1,4 +1,3 @@
-
 import "dotenv/config";
 import { db } from "../lib/db";
 
@@ -8,7 +7,7 @@ async function main() {
 
   if (!adminEmail || !adminPasswordHash) {
     throw new Error(
-      "Set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD_HASH before seeding."
+      "Set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD_HASH before seeding.",
     );
   }
 

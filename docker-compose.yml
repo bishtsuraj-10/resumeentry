@@ -27,7 +27,7 @@ services:
   setup:
     image: node:22-alpine
     working_dir: /app
-    command: sh -c "npm ci && npx prisma generate"
+    command: sh -c "npm ci && npx prisma generate && npx prisma migrate deploy"
     env_file: .env
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/talentflow?schema=public
@@ -39,7 +39,7 @@ services:
   web:
     image: node:22-alpine
     working_dir: /app
-    command: sh -c "npx prisma migrate deploy && npm run dev -- --hostname 0.0.0.0"
+    command: npm run dev -- --hostname 0.0.0.0
     env_file: .env
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/talentflow?schema=public

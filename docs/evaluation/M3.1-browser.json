@@ -1,0 +1,23 @@
+{
+  "browser": "Microsoft Edge headless",
+  "mode": "Real React components; mocked synthetic HTTP contracts, permissions and Next Link",
+  "checks": [
+    "Detail navigation renders complete sections without runtime crashes",
+    "Basic edit uses M2 revision endpoint and submits only the chosen field",
+    "Conflicting revision keeps the unsaved field and explains recovery",
+    "Unsuccessful API response presents a retry action",
+    "Empty-data response shows an error instead of crashing",
+    "Navigation cancels the previous request",
+    "View-only user has no correction controls or private document link",
+    "Expanded list has all overview columns and identified education",
+    "Status filter preserves server query navigation",
+    "Pagination still requests the next page",
+    "Mobile list scrolls horizontally within its table container",
+    "List View/Review link navigates to the detail route"
+  ],
+  "passed": 12,
+  "failed": 0,
+  "limitations": [
+    "Does not exercise a live authenticated Next server or database writes; API permission and revision services are tested separately."
+  ]
+}

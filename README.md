@@ -62,6 +62,12 @@ Set `SEED_ADMIN_EMAIL` to the administrator email and `SEED_ADMIN_PASSWORD_HASH`
 
 The optional AI adapter only assists with low-confidence name and designation extraction. Its request includes resume text; configure it only with a provider approved to process that data. Parsing continues without AI when these settings are absent.
 
+Remote AI now also requires explicit `AI_PARSING_ENABLED=true`. It is disabled by default, including when provider credentials are present.
+
+See [M1 worker reliability](docs/M1-worker-reliability.md) for migration rollout, processing ownership, queue recovery, batch accounting, isolated database tests, and outage verification.
+
+See [M2 candidate data](docs/M2-candidate-data.md) for structured candidate models, validated persistence APIs, private provenance, compatibility, migration rollout, and database tests.
+
 ## Run with Docker Compose
 
 1. Complete the configuration above and make sure `.env` exists.
@@ -168,10 +174,18 @@ Important API routes include `POST /api/resumes/upload`, `GET /api/resumes`, `GE
 ## Data, troubleshooting, and deployment notes
 
 - **Worker exits while OCRing a scanned PDF:** restart with the current code; scanned PDFs are rendered to PNG pages before being passed to Tesseract. Check worker logs for subsequent parsing errors.
-- **OCR first run is slow or has no language data:** allow Tesseract.js to download its English data, or set `TESSDATA_PATH` to an existing English trained-data directory.
+- **OCR language data:** provision a local uncompressed `eng.traineddata` and set `OCR_LANG_PATH` (or legacy `TESSDATA_PATH`) to its directory. The worker does not download language data automatically.
 - **Database connection errors:** check `DATABASE_URL`, confirm PostgreSQL is listening, and run `npm run db:deploy`.
 - **Queue connection errors or pending work:** check `REDIS_URL`, confirm Redis is listening, and ensure the worker is running.
 - **Uploaded file cannot be opened:** confirm `STORAGE_PATH` is persistent and shared by web and worker processes. Docker Compose uses a shared `uploads` volume.
 - **Security:** keep `.env`, private uploads, and database backups protected. In production use TLS, persistent PostgreSQL/Redis, encrypted private file storage, backups, and monitoring for worker/queue failures. Consider private object storage for multi-host deployments. Do not log resume text or expose the upload directory publicly.
 
 Automated tests cover deterministic field extraction, duplicate matching, PDF/DOCX parsing, malformed files, and Excel generation. Use a non-production database for any integration or deployment checks.
+
+See [M3 comprehensive extraction](docs/M3-comprehensive-extraction.md) for the local pipeline, correction policy, limits, evaluation results and operational setup.
+
+See [M3.1 review workflow and evaluation](docs/M3.1-review-workflow.md) for candidate review, revision-safe corrections, recruiter tables, synthetic batch results, verification and the proposed explicit refresh procedure.
+
+See [M3.2 candidate review workspace](docs/M3.2-candidate-review-workspace.md) for the two-panel review UI, authenticated PDF preview, draft workflow, persisted section mappings, known verification limits and live browser verification.
+
+See [M3.3 candidate review polish](docs/M3.3-candidate-review-polish.md) for grouped navigation, typography, responsive PDF fitting, reusable review components and final verification results.

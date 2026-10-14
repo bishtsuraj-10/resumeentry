@@ -1,0 +1,43 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Length 701 >>
+stream
+BT /F1 11 Tf 1 0 0 1 40 800 Tm (ALEX MORGAN) Tj ET
+BT /F1 11 Tf 1 0 0 1 40 780 Tm (Software Engineer) Tj ET
+BT /F1 11 Tf 1 0 0 1 40 760 Tm (alex.morgan@example.com) Tj ET
+BT /F1 11 Tf 1 0 0 1 40 740 Tm (+91 98765 43210) Tj ET
+BT /F1 11 Tf 1 0 0 1 40 720 Tm (SKILLS) Tj ET
+BT /F1 11 Tf 1 0 0 1 320 720 Tm (EDUCATION) Tj ET
+BT /F1 11 Tf 1 0 0 1 40 700 Tm (JavaScript, React) Tj ET
+BT /F1 11 Tf 1 0 0 1 320 700 Tm (B.Tech in Computing) Tj ET
+BT /F1 11 Tf 1 0 0 1 40 680 Tm (Docker) Tj ET
+BT /F1 11 Tf 1 0 0 1 320 680 Tm (Institution: Example Institute) Tj ET
+BT /F1 11 Tf 1 0 0 1 40 660 Tm (Experience) Tj ET
+BT /F1 11 Tf 1 0 0 1 40 640 Tm (Software Engineer at Example Labs | Jan 2022 - Dec 2023) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >>  >> /Contents 4 0 R >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000185 00000 n 
+0000000936 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1063
+%%EOF
