@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { transaction } from "./processing";
+import { parsePhoneNumberFromString } from "libphonenumber-js/max";
 import {
   candidatePatchSchema,
   normalizeSkillName,
@@ -25,6 +26,7 @@ export const candidateInclude = {
       resumeId: true,
       skillId: true,
       context: true,
+      originalText: true,
       confidence: true,
       verifiedAt: true,
       skill: { include: { terms: true } },
@@ -244,6 +246,14 @@ export async function patchCandidate(
           409,
           "Cancelled resumes cannot be edited.",
         );
+      if (
+        (patch.basic || patch.completeReview) &&
+        !["REVIEW", "COMPLETED", "DUPLICATE"].includes(resume.status)
+      )
+        throw new CandidateDataError(
+          409,
+          "Wait for successful processing before reviewing identity or completing review.",
+        );
       const existing = await tx.candidateProfile.findUnique({
         where: { resumeId },
       });
@@ -297,6 +307,54 @@ export async function patchCandidate(
             auditLogId: audit.id,
           })),
         });
+      }
+      if (patch.basic) {
+        const values = patch.basic;
+        const phone = values.phone
+          ? parsePhoneNumberFromString(values.phone)
+          : undefined;
+        const data = {
+          ...values,
+          ...(values.phone !== undefined
+            ? {
+                phone: phone?.formatInternational() ?? null,
+                normalizedPhone: phone?.number ?? null,
+                countryCode: phone ? "+" + phone.countryCallingCode : null,
+              }
+            : {}),
+          // Freeze machine replacement using M1's existing human-correction fence.
+          // Per-field verification lives in evidence, not this legacy timestamp.
+          reviewedAt: now,
+        };
+        await tx.resumeExtraction.upsert({
+          where: { resumeId },
+          create: { resumeId, ...data },
+          update: data,
+        });
+        for (const field of Object.keys(values))
+          await saveEvidence("basic." + field, undefined);
+      }
+      if (patch.completeReview) {
+        if (
+          !(await tx.resumeExtraction.findUnique({
+            where: { resumeId },
+            select: { resumeId: true },
+          }))
+        )
+          throw new CandidateDataError(
+            422,
+            "No extraction is available to complete review.",
+          );
+        await tx.resumeExtraction.update({
+          where: { resumeId },
+          data: { requiresReview: false, reviewedAt: now },
+        });
+        if (resume.status === "REVIEW")
+          await tx.resume.update({
+            where: { id: resumeId },
+            data: { status: "COMPLETED" },
+          });
+        await saveEvidence("review.completed", undefined);
       }
       if (patch.profile) {
         const { evidence, dateOfBirth, ...values } = patch.profile;
@@ -499,6 +557,13 @@ export async function patchCandidate(
             }
           }
           await saveEvidence(section + "." + savedId, item.evidence);
+          for (const field of Object.keys(item).filter(
+            (key) => !["id", "evidence", "position"].includes(key),
+          ))
+            await saveEvidence(
+              section + "." + savedId + "." + field,
+              undefined,
+            );
         }
         if ((await delegate.findMany({ where: { resumeId } })).length > 100)
           throw new CandidateDataError(422, "At most 100 entries per section.");

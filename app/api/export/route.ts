@@ -3,8 +3,9 @@ import { PassThrough, Readable } from "node:stream";
 import { requireApiSession, session } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
-  appendResumeExportRow,
-  createResumeWorksheet,
+  appendStoredResume,
+  createResumeExportSheets,
+  resumeExportInclude,
 } from "@/lib/excel-export";
 
 export const maxDuration = 300;
@@ -46,43 +47,27 @@ export async function GET(request: Request) {
     useStyles: true,
     useSharedStrings: false,
   });
-  const sheet = createResumeWorksheet(workbook);
+  const sheets = createResumeExportSheets(workbook);
   void (async () => {
     try {
       let cursor: string | undefined;
       while (true) {
         const rows = await db.resume.findMany({
           where,
-          include: { extraction: true },
+          include: resumeExportInclude,
           orderBy: { id: "asc" },
           take: 500,
           ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
         });
         if (!rows.length) break;
         for (const row of rows) {
-          const e = row.extraction;
-          appendResumeExportRow(sheet, {
-            id: row.id,
-            fileName: row.fileName,
-            name: e?.name ?? "",
-            email: e?.email ?? "",
-            phone: e?.phone ?? "",
-            designation: e?.designation ?? "",
-            nameConfidence: Math.round((e?.nameConfidence ?? 0) * 100),
-            emailConfidence: Math.round((e?.emailConfidence ?? 0) * 100),
-            phoneConfidence: Math.round((e?.phoneConfidence ?? 0) * 100),
-            designationConfidence: Math.round(
-              (e?.designationConfidence ?? 0) * 100,
-            ),
-            overallConfidence: Math.round((e?.overallConfidence ?? 0) * 100),
-            status: row.status,
-            createdAt: row.createdAt.toISOString(),
-          });
+          appendStoredResume(sheets, row);
         }
         cursor = rows[rows.length - 1].id;
         if (rows.length < 500) break;
       }
-      await sheet.commit();
+      for (const sheet of [sheets.resumes, ...Object.values(sheets.details), sheets.states, sheets.overflow])
+        await sheet.commit();
       await workbook.commit();
       await db.auditLog.create({
         data: {

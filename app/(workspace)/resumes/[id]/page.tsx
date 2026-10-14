@@ -1,10 +1,11 @@
 import PageAccess from "../../page-access";
 import ResumeDetail from "./client";
-export default function Page(props: PageProps<"/resumes/[id]">) {
+export default async function Page({ params }: PageProps<"/resumes/[id]">) {
+  const { id } = await params;
   return (
     <PageAccess
       permission="resumes.view"
-      render={() => <ResumeDetail {...props} />}
+      render={() => <ResumeDetail id={id} />}
     />
   );
 }

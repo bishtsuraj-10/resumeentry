@@ -6,6 +6,8 @@ import {
   type ExtractionMethod,
 } from "@prisma/client";
 import type { ResumeExtraction } from "./resume-parser";
+import type { StructuredExtraction } from "./resume-parser/index";
+import { persistStructured } from "./resume-parser/persistence";
 
 export const terminalStatuses: ResumeStatus[] = [
   "COMPLETED",
@@ -48,8 +50,13 @@ export async function transaction<T>(
     try {
       return await db.$transaction(fn, { isolationLevel: "Serializable" });
     } catch (error) {
-      if (!isTransactionConflict(error) || attempt >= 6) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 10 * (attempt + 1)));
+      if (!isTransactionConflict(error) || attempt >= 9) throw error;
+      // Spread contending completions rather than repeatedly waking them together.
+      // These database retries do not consume document-processing attempts.
+      const delay = Math.min(250, 20 * 2 ** attempt);
+      await new Promise((resolve) =>
+        setTimeout(resolve, delay + Math.floor(Math.random() * delay)),
+      );
     }
   }
 }
@@ -142,6 +149,7 @@ export async function finalizeResume(
     parserVersion: string;
     startedAt: Date;
     method?: ExtractionMethod;
+    structured?: StructuredExtraction;
   },
 ) {
   return transaction(db, async (tx) => {
@@ -209,7 +217,7 @@ export async function finalizeResume(
         update: {},
       });
     await reconcileBatch(tx, resume.batchId);
-    await tx.extractionRun.create({
+    const run = await tx.extractionRun.create({
       data: {
         resumeId: id,
         method: provenance?.method ?? "LOCAL",
@@ -235,6 +243,8 @@ export async function finalizeResume(
         },
       },
     });
+    if (provenance?.structured)
+      await persistStructured(tx, id, run.id, provenance.structured);
     return true;
   });
 }
@@ -255,16 +265,22 @@ export function classifyError(error: unknown) {
   const e = error as { name?: string; code?: string };
   const permanent =
     error instanceof PermanentProcessingError ||
-    ["InvalidPDFException", "PasswordException", "FormatError"].includes(
-      e?.name ?? "",
-    );
+    [
+      "InvalidPDFException",
+      "PasswordException",
+      "FormatError",
+      "DocumentLimitError",
+    ].includes(e?.name ?? "");
   // Unknown errors receive bounded retries; messages may contain private text.
   const reason =
     error instanceof PermanentProcessingError
       ? error.reason
-      : ["InvalidPDFException", "PasswordException", "FormatError"].includes(
-            e?.name ?? "",
-          )
+      : [
+            "InvalidPDFException",
+            "PasswordException",
+            "FormatError",
+            "DocumentLimitError",
+          ].includes(e?.name ?? "")
         ? e.name
         : [
               "ECONNRESET",

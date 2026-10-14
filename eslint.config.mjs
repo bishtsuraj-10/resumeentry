@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored runtime worker from the installed PDF.js package (Apache-2.0).
+    "public/pdf.worker.min.mjs",
   ]),
 ]);
 

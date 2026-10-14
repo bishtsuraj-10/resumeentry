@@ -252,6 +252,97 @@ button { font: inherit; cursor: pointer; }
   .modern-workspace { transition: none; }
   .modern-workspace .workspace-drawer[open] { animation: none; }
 }
+
+/* M3.2 candidate review: compact actions and independently scrolling surfaces. */
+.modern-workspace .candidate-review { gap: 12px; height: calc(100dvh - 124px); min-height: 540px; display: flex; flex-direction: column; font-size: 14px; line-height: 1.55; }
+.modern-workspace .candidate-sticky-header { position: sticky; top: 0; z-index: 2; flex-shrink: 0; padding: 18px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); align-items: center; }
+.modern-workspace .candidate-identity { min-width: 0; }
+.modern-workspace .candidate-identity h1 { margin: 6px 0; font-size: 24px; }
+.modern-workspace .candidate-identity p { font-size: 13px; overflow-wrap: anywhere; }
+.modern-workspace .candidate-contact-line { margin-top: 4px; }
+.candidate-header-meta,.candidate-header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.candidate-header-meta { margin-top: 10px; font-size: 12px; color: var(--text-secondary); }
+.candidate-header-meta>span+span { padding-left: 8px; border-left: 1px solid var(--border); }
+.candidate-header-actions { max-width: 470px; justify-content: flex-end; }
+.modern-workspace .candidate-header-actions .button { min-height: 38px; padding: 8px 12px; font-size: 12px; height: auto; }
+.review-notice { margin: 0; padding: 10px 16px; border-radius: var(--radius-control); flex-shrink: 0; }
+.review-success { color: var(--success-text); background: var(--success-surface); }
+.review-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 11px; color: var(--text-muted); padding-inline: 4px; }
+.review-legend strong { color: var(--warning-text); font-weight: 500; }
+.panel-proportion { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text-muted); }
+.panel-proportion input { accent-color: var(--accent); width: 110px; }
+.candidate-workspace { display: grid; flex: 1; min-height: 0; gap: 16px; }
+.candidate-information { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.modern-workspace .candidate-section-links { flex-shrink: 0; gap: 4px; padding: 8px; background: var(--surface); border-radius: var(--radius-card) var(--radius-card) 0 0; border: 1px solid var(--border); border-bottom: 0; }
+.modern-workspace .candidate-section-links a { padding: 7px 10px; border-radius: var(--radius-control); font-size: 12px; white-space: nowrap; text-transform: none; }
+.modern-workspace .candidate-section-links a:hover { background: var(--surface-hover); }
+.modern-workspace .candidate-section-links a[aria-current] { color: var(--accent-text); background: var(--accent-soft); font-weight: 600; }
+.candidate-section-scroll { overflow: auto; flex: 1; min-height: 0; border: 1px solid var(--border); border-radius: 0 0 var(--radius-card) var(--radius-card); background: var(--surface); scrollbar-gutter: stable; }
+.modern-workspace .candidate-section-scroll>.tool-panel { border: 0; border-radius: 0; padding: 22px; scroll-margin-top: 0; }
+.modern-workspace .candidate-section-scroll>.tool-panel+.tool-panel { border-top: 1px solid var(--border); }
+.modern-workspace .candidate-review h2 { font-size: 17px; margin: 0 0 16px; letter-spacing: -.2px; }
+.modern-workspace .candidate-review h3 { font-size: 15px; line-height: 1.5; }
+.modern-workspace .candidate-facts { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px 20px; margin: 0 0 18px; }
+.modern-workspace .candidate-facts dd { font-size: 14px; }
+.modern-workspace .candidate-review .candidate-prose { line-height: 1.75; color: var(--text-secondary); overflow-wrap: anywhere; }
+.candidate-record { margin-bottom: 12px; padding: 16px; border: 0; border-radius: var(--radius-control); background: var(--surface-subtle); }
+#employment .candidate-record { position: relative; margin-left: 8px; border-left: 2px solid var(--accent); padding-left: 20px; border-radius: 0 var(--radius-control) var(--radius-control) 0; }
+#employment .candidate-record::before { content: ""; position: absolute; left: -5px; top: 23px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.modern-workspace .candidate-skills { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.modern-workspace .candidate-skills article { border: 0; padding: 12px; border-radius: var(--radius-control); background: var(--surface-subtle); min-width: 0; overflow-wrap: anywhere; }
+.modern-workspace .candidate-review .skill-chip { display: inline-flex; background: var(--accent-soft); color: var(--accent-text); border-radius: 20px; padding: 4px 10px; font-size: 13px; margin: 0; }
+.modern-workspace .candidate-editor summary { display: inline-block; font-size: 12px; color: var(--accent-text); padding: 6px 10px; border-radius: var(--radius-control); background: var(--accent-soft); }
+.candidate-editor[open] { background: var(--surface-subtle); border-radius: var(--radius-control); padding: 12px; }
+.candidate-field-register { display: grid; gap: 10px; margin: 16px 0; }
+.candidate-field-register>div { display: grid; grid-template-columns: 120px minmax(0,1fr); gap: 12px; }
+.candidate-field-register dt { font-size: 12px; color: var(--text-secondary); text-transform: capitalize; }
+.candidate-field-register dd { margin: 0; overflow-wrap: anywhere; font-size: 13px; white-space: pre-line; }
+.field-state { display: block; margin-top: 3px; font-size: 11px; color: var(--text-muted); }
+.is-verified { color: var(--success-text); }
+.is-uncertain { color: var(--warning-text); }
+.field-edit { border: 0; background: transparent; color: var(--accent-text); padding: 4px 0; font-size: 12px; cursor: pointer; }
+.field-edit:disabled { opacity: .5; cursor: default; }
+.modern-workspace .candidate-editor .review-form { display: grid; gap: 12px; }
+.candidate-editor .review-form label { display: grid; gap: 6px; font-size: 13px; }
+.modern-workspace .candidate-editor .tool-input { width: 100%; min-width: 0; }
+.candidate-editor .candidate-actions { gap: 8px; }
+.candidate-editor .candidate-muted { margin: 0; }
+.candidate-document { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; }
+.document-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 16px; }
+.modern-workspace .document-heading h2 { margin: 0; font-size: 15px; }
+.document-heading a { font-size: 12px; }
+.candidate-document>.candidate-muted { padding: 16px; }
+.pdf-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 12px; background: var(--surface-subtle); }
+.pdf-toolbar label { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.modern-workspace .pdf-toolbar .tool-input { min-width: 0; width: 65px; height: 34px; padding: 4px; font-size: 12px; }
+.modern-workspace .pdf-toolbar select.tool-input { width: 76px; }
+.modern-workspace .pdf-toolbar .button { min-height: 34px; height: 34px; flex: none; }
+.pdf-render-status { font-size: 11px; color: var(--text-muted); margin: 0; padding: 6px 12px; }
+.pdf-scroll { flex: 1; min-height: 0; overflow: auto; background: var(--canvas); padding: 12px; scrollbar-gutter: stable; }
+.pdf-scroll canvas { display: block; margin-inline: auto; background: white; box-shadow: var(--card-shadow); }
+.document-state { padding: 20px; font-size: 13px; color: var(--danger-text); }
+.candidate-review :is(a,button,input,select,textarea,summary,[tabindex]):focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.modern-workspace .candidate-review table { min-width: 580px; }
+@media (max-width: 1050px) {
+ .modern-workspace .candidate-sticky-header { align-items: flex-start; flex-direction: column; gap: 12px; }
+ .candidate-header-actions { max-width: none; justify-content: flex-start; }
+ .modern-workspace .candidate-skills { grid-template-columns: minmax(0,1fr); }
+}
+@media (max-width: 800px) {
+ .modern-workspace .candidate-review { height: auto; min-height: 0; }
+ .modern-workspace .candidate-sticky-header { top: -1px; padding: 12px; }
+ .modern-workspace .candidate-identity h1 { font-size: 21px; }
+ .candidate-workspace { grid-template-columns: minmax(0,1fr) !important; }
+ .candidate-section-scroll { max-height: 65dvh; min-height: 260px; }
+ .candidate-document { height: 65dvh; min-height: 300px; }
+ .panel-proportion { display: none; }
+ .candidate-header-meta { font-size: 11px; }
+ .modern-workspace .candidate-section-links { flex-wrap: nowrap; overflow-x: auto; }
+ .candidate-field-register>div { grid-template-columns: minmax(0,1fr); gap: 2px; }
+ .modern-workspace .candidate-facts { grid-template-columns: minmax(0,1fr); }
+ .modern-workspace .candidate-header-actions .button { flex: 1 1 auto; }
+ .modern-workspace .candidate-section-scroll>.tool-panel { padding: 16px; }
+}
 /* Semantic surfaces shared by the workspace and public sign-in screen. */
 :root {
   color-scheme: light;
@@ -334,6 +425,118 @@ button { font: inherit; cursor: pointer; }
 .modern-workspace .table-state,.modern-workspace .empty-search { min-height: 180px; padding: 32px 20px; text-align: center; font-size: 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text-muted); }
 .modern-workspace .table-state p,.modern-workspace .empty-search p { margin: 0; max-width: 55ch; line-height: 1.6; }
 .ui-error { color: var(--danger-text); background: var(--danger-surface); padding: 14px 16px; border-radius: var(--radius-control); font-size: 13px; line-height: 1.6; }
+.candidate-review {
+  display: grid;
+  gap: 18px;
+}
+.candidate-review .tool-header {
+  margin-bottom: 0;
+  gap: 16px;
+}
+.candidate-section-links,
+.candidate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.candidate-section-links a {
+  color: var(--text-secondary);
+  text-transform: capitalize;
+}
+.candidate-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+.candidate-facts dt {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.candidate-facts dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+.candidate-muted {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.candidate-prose {
+  white-space: pre-line;
+}
+.candidate-record {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+.candidate-review h3 {
+  font-size: 15px;
+  margin: 10px 0;
+}
+.candidate-review h4 {
+  font-size: 14px;
+  margin: 12px 0 6px;
+}
+.candidate-editor {
+  margin: 12px 0;
+}
+.candidate-editor summary,
+.candidate-review details > summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+.candidate-editor .review-form {
+  margin-top: 12px;
+  max-width: 680px;
+}
+.modern-workspace .candidate-editor textarea.tool-input {
+  height: auto;
+  padding: 10px 12px;
+  resize: vertical;
+}
+.candidate-skills {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.candidate-skills article {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.candidate-review .table-scroll {
+  overflow-x: auto;
+}
+.candidate-review table {
+  min-width: 850px;
+}
+.candidate-review td {
+  white-space: normal;
+  max-width: 460px;
+  vertical-align: top;
+}
+.resume-list-page table {
+  min-width: 1600px;
+}
+.resume-table-skills {
+  display: block;
+  min-width: 150px;
+  max-width: 240px;
+  white-space: normal;
+}
+.resume-list-page .table-toolbar {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+@media (max-width: 760px) {
+  .candidate-facts,
+  .candidate-skills {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .candidate-review .tool-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
 .modern-workspace .ui-error { color: var(--danger-text); }
 .modern-workspace .loading-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
 .modern-workspace .status-pill { gap: 6px; font-size: 12px; line-height: 1.4; font-weight: 500; color: var(--neutral-text); background: var(--neutral-surface); }
@@ -506,4 +709,123 @@ button { font: inherit; cursor: pointer; }
 }
 @media (prefers-reduced-motion: reduce) {
  .modern-workspace .permissions-page *,.permissions-create-dialog * { scroll-behavior: auto; transition: none; animation: none; }
+}
+
+/* Override shared page-header sizing for the persistent review toolbar. */
+.modern-workspace .candidate-review .candidate-sticky-header { min-height: 0; padding: 12px 16px; margin-bottom: 0; gap: 12px; }
+.modern-workspace .candidate-review .candidate-identity .back-link { padding: 0; margin: 0; border: 0; background: transparent; min-height: 20px; font-size: 12px; }
+.modern-workspace .candidate-review .candidate-identity h1 { margin: 4px 0; font-size: 24px; }
+.modern-workspace .candidate-review .candidate-header-meta .status-pill { margin-top: 0; }
+.modern-workspace .candidate-review .document-heading .back-link { margin: 0; padding: 0; border: 0; background: transparent; }
+@media (max-width: 800px) {
+ .modern-workspace .candidate-review .candidate-sticky-header { padding: 12px; }
+ .modern-workspace .candidate-review .candidate-identity h1 { font-size: 21px; }
+}
+
+/* M3.3: readable candidate values, quieter review states, two clear scroll regions. */
+.modern-workspace .workspace-scroll:has(.candidate-review) { overflow: hidden; scrollbar-gutter: auto; }
+.modern-workspace .page-content:has(> .candidate-review) { height: 100%; min-height: 0; padding: 20px var(--workspace-gutter); }
+.modern-workspace .page-content:has(> .candidate-review)>.page-footer { display: none; }
+.modern-workspace .candidate-review { height: calc(100dvh - 108px); min-height: 0; gap: 10px; font-size: 15px; line-height: 1.6; }
+.modern-workspace .page-content:has(> .candidate-review)>.candidate-review { height: 100%; }
+.modern-workspace .candidate-review .candidate-sticky-header { padding: 14px 18px; box-shadow: none; flex-wrap: nowrap; }
+.modern-workspace .candidate-review .candidate-identity h1 { font-size: 25px; font-weight: 650; line-height: 1.25; letter-spacing: -.5px; }
+.modern-workspace .candidate-review .candidate-identity p { font-size: 14px; }
+.candidate-role,.candidate-contact-line { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; }
+.candidate-role strong { font-weight: 550; color: var(--text-primary); }
+.candidate-role>span { color: var(--text-secondary); }
+.candidate-contact-line { font-size: 14px; color: var(--text-secondary); margin-top: 4px; }
+.candidate-contact-line a:hover { color: var(--accent-text); text-decoration: underline; }
+.candidate-header-meta { gap: 12px; margin-top: 8px; font-size: 13px; }
+.candidate-header-meta>span+span { border: 0; padding: 0; }
+.candidate-header-meta strong { font-weight: 600; color: var(--text-primary); }
+.candidate-header-actions { display: grid; justify-items: end; gap: 8px; max-width: none; flex-shrink: 0; }
+.candidate-source-actions,.candidate-review-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.modern-workspace .candidate-header-actions .button { font-size: 13px; min-height: 38px; font-weight: 550; }
+.review-legend { font-size: 12px; color: var(--text-secondary); gap: 8px 18px; }
+.review-legend>span::before { content: ""; display: inline-block; height: 6px; width: 6px; border-radius: 50%; background: currentColor; vertical-align: middle; margin-right: 6px; }
+.panel-proportion { font-size: 12px; margin: 0; }
+.candidate-workspace { gap: 18px; }
+.modern-workspace .candidate-section-links { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 4px; padding: 8px; }
+.modern-workspace .candidate-section-links a { display: flex; align-items: center; min-height: 38px; padding: 8px 10px; font-size: 13px; line-height: 1.4; }
+.modern-workspace .candidate-section-links a[aria-current] { font-weight: 600; box-shadow: inset 0 -2px var(--accent); }
+.candidate-section-scroll,.pdf-scroll { overscroll-behavior: contain; }
+.modern-workspace .candidate-section-scroll>.tool-panel { padding: 24px; }
+.modern-workspace .candidate-review h2 { font-size: 19px; font-weight: 600; margin: 0 0 20px; line-height: 1.4; }
+.modern-workspace .candidate-review h3 { font-size: 17px; font-weight: 600; margin: 0 0 8px; line-height: 1.5; }
+.modern-workspace .candidate-review h4 { font-size: 14px; font-weight: 600; margin: 18px 0 8px; }
+.modern-workspace .candidate-facts { gap: 0 24px; margin-bottom: 16px; }
+.candidate-facts>div { padding: 12px 0; min-width: 0; }
+.modern-workspace .candidate-facts dt { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+.modern-workspace .candidate-facts dd { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; font-size: 16px; font-weight: 500; line-height: 1.6; margin-top: 4px; color: var(--text-primary); }
+.modern-workspace .candidate-muted { color: var(--text-secondary); font-size: 14px; font-weight: 400; }
+.verification-indicator { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; font-size: 12px; line-height: 1.5; font-weight: 500; white-space: nowrap; }
+.verification-indicator.is-machine { color: var(--text-secondary); }
+.verification-indicator.is-machine>span { font-size: 20px; line-height: .6; }
+.verification-indicator.is-verified { color: var(--success-text); }
+.verification-indicator.is-uncertain { color: var(--warning-text); }
+.modern-workspace .candidate-review .candidate-prose { font-size: 16px; font-weight: 400; line-height: 1.8; max-width: 66ch; color: var(--text-primary); margin: 12px 0 24px; }
+.candidate-review .candidate-record { padding: 18px; margin-bottom: 16px; border: 1px solid var(--border); background: var(--surface-subtle); }
+.candidate-record>p { font-size: 14px; line-height: 1.7; color: var(--text-secondary); margin: 6px 0 12px; }
+.candidate-record ul { padding-left: 20px; margin: 8px 0 16px; }
+.candidate-record li { font-size: 15px; line-height: 1.75; margin-bottom: 5px; }
+#employment .candidate-record { border-left: 2px solid var(--accent); padding-left: 22px; }
+.candidate-review .record-review-state { font-size: 12px; margin: 12px 0 4px; color: var(--text-secondary); }
+.candidate-review .field-state { font-size: 13px; line-height: 1.6; }
+.modern-workspace .candidate-skills { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.modern-workspace .candidate-skills article { padding: 14px; border: 1px solid var(--border); background: var(--surface); }
+.modern-workspace .candidate-review .skill-chip { font-size: 14px; padding: 5px 10px; font-weight: 550; }
+.candidate-skills article>p { font-size: 13px; margin: 8px 0; }
+.skill-source summary { font-size: 13px; }
+.skill-source p { font-size: 14px; line-height: 1.65; }
+.modern-workspace .candidate-editor summary { font-size: 13px; min-height: 34px; display: inline-flex; align-items: center; padding: 6px 10px; border: 1px solid var(--border); background: var(--surface); color: var(--accent-text); }
+.candidate-editor[open] { padding: 16px; border: 1px solid var(--border); background: var(--surface-subtle); }
+.candidate-field-register { gap: 12px; }
+.candidate-field-register>div { padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.candidate-field-register dt { font-size: 13px; }
+.candidate-field-register dd { font-size: 15px; line-height: 1.65; }
+.candidate-field-register .verification-indicator { margin-left: 8px; }
+.field-edit { display: block; font-size: 13px; padding: 6px 0; }
+.modern-workspace .candidate-editor .review-form label { font-size: 14px; }
+.modern-workspace .candidate-editor .tool-input { font-size: 15px; }
+.modern-workspace .candidate-editor .candidate-muted { font-size: 13px; }
+.modern-workspace .document-heading { padding: 16px; }
+.modern-workspace .document-heading h2 { font-size: 16px; }
+.document-heading a { font-size: 13px; }
+.pdf-toolbar { padding: 10px 12px; gap: 8px; }
+.pdf-toolbar label { font-size: 13px; }
+.modern-workspace .pdf-toolbar select.tool-input { width: 98px; font-size: 13px; }
+.pdf-render-status { font-size: 12px; padding: 8px 12px; }
+.pdf-scroll { padding: 16px; scrollbar-gutter: auto; }
+.pdf-scroll canvas { box-shadow: none; }
+#links .candidate-record>a { font-size: 16px; font-weight: 550; color: var(--accent-text); text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 1100px) {
+ .modern-workspace .candidate-review .candidate-sticky-header { flex-wrap: wrap; }
+ .candidate-header-actions { justify-items: start; display: flex; flex-wrap: wrap; }
+ .modern-workspace .candidate-section-links { grid-template-columns: repeat(2,minmax(0,1fr)); }
+ .modern-workspace .candidate-skills { grid-template-columns: minmax(0,1fr); }
+}
+@media (max-width: 800px) {
+ .modern-workspace .workspace-scroll:has(.candidate-review) { overflow: auto; }
+ .modern-workspace .candidate-review { height: auto; }
+ .candidate-workspace { flex: none; }
+ .candidate-information { height: calc(70dvh + 56px); }
+ .modern-workspace .page-content:has(> .candidate-review) { height: auto; padding: 16px; }
+ .modern-workspace .page-content:has(> .candidate-review)>.candidate-review { height: auto; }
+ .modern-workspace .candidate-review .candidate-sticky-header { padding: 12px; }
+ .modern-workspace .candidate-review .candidate-identity h1 { font-size: 23px; }
+ .candidate-header-actions,.candidate-source-actions,.candidate-review-actions { width: 100%; }
+ .candidate-header-actions { display: grid; gap: 8px; }
+ .modern-workspace .candidate-section-links { display: flex; flex-wrap: nowrap; overflow-x: auto; }
+ .modern-workspace .candidate-section-links a { flex: 0 0 auto; }
+ .modern-workspace .candidate-section-scroll>.tool-panel { padding: 20px; }
+ .candidate-section-scroll { max-height: 70dvh; }
+ .candidate-document { height: 70dvh; }
+ .modern-workspace .candidate-facts { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 16px; }
+ .modern-workspace .candidate-facts dd { font-size: 15px; }
+}
+@media (max-width: 420px) {
+ .modern-workspace .candidate-facts { grid-template-columns: minmax(0,1fr); }
+ .candidate-header-meta { gap: 8px; }
+ .modern-workspace .candidate-header-actions .button { padding-inline: 8px; font-size: 12px; }
 }

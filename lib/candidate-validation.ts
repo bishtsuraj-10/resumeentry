@@ -205,6 +205,27 @@ const dobSchema = z
 export const candidatePatchSchema = z
   .strictObject({
     expectedRevision: z.number().int().min(0).max(2147483646),
+    basic: z
+      .strictObject({
+        name: nullable(),
+        email: z
+          .string()
+          .trim()
+          .email()
+          .transform((v) => v.toLowerCase())
+          .nullable()
+          .optional(),
+        phone: text(40)
+          .refine(
+            (v) => Boolean(parsePhoneNumberFromString(v)?.isValid()),
+            "Use a valid international phone number",
+          )
+          .nullable()
+          .optional(),
+        designation: nullable(),
+      })
+      .optional(),
+    completeReview: z.literal(true).optional(),
     profile: z
       .strictObject({
         firstName: nullable(),
@@ -258,12 +279,14 @@ export const candidatePatchSchema = z
       !Object.entries(value).some(([key, item]) =>
         item === undefined
           ? false
-          : key === "profile"
-            ? Object.keys(item as object).some((key) => key !== "evidence")
-            : key !== "expectedRevision" &&
-              ((item as { upsert?: unknown[]; remove?: unknown[] }).upsert
-                ?.length ||
-                (item as { remove?: unknown[] }).remove?.length),
+          : key === "completeReview"
+            ? item === true
+            : key === "profile" || key === "basic"
+              ? Object.keys(item as object).some((key) => key !== "evidence")
+              : key !== "expectedRevision" &&
+                ((item as { upsert?: unknown[]; remove?: unknown[] }).upsert
+                  ?.length ||
+                  (item as { remove?: unknown[] }).remove?.length),
       )
     )
       ctx.addIssue({ code: "custom", message: "Supply candidate changes" });
@@ -273,6 +296,8 @@ export const candidatePatchSchema = z
     for (const [section, changes] of Object.entries(value)) {
       if (
         section === "profile" ||
+        section === "basic" ||
+        section === "completeReview" ||
         section === "expectedRevision" ||
         changes === undefined
       )

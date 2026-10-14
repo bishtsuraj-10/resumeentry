@@ -38,7 +38,16 @@ export function candidateErrorResponse(error: unknown) {
   if (error instanceof CandidateDataError)
     return Response.json({ error: error.message }, { status: error.status });
   if (error instanceof ZodError)
-    return Response.json({ error: "Invalid candidate data." }, { status: 400 });
+    return Response.json(
+      {
+        error: "Invalid candidate data.",
+        issues: error.issues.map((issue) => ({
+          path: issue.path.join("."),
+          message: issue.message,
+        })),
+      },
+      { status: 400 },
+    );
   return Response.json(
     { error: "Candidate operation failed." },
     { status: 500 },

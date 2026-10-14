@@ -2,6 +2,7 @@ import { z } from "zod";
 import { requireApiSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { publicResume } from "@/lib/candidate-http";
+import { resumeOverview, resumeOverviewSelect } from "@/lib/resume-overview";
 
 const querySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -60,7 +61,7 @@ export async function GET(request: Request) {
   const [items, total] = await Promise.all([
     db.resume.findMany({
       where,
-      include: { extraction: true },
+      select: resumeOverviewSelect,
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * limit,
       take: limit,
@@ -69,7 +70,11 @@ export async function GET(request: Request) {
   ]);
   return Response.json(
     {
-      items: items.map(publicResume),
+      items: items.map((item) => {
+        const { candidate: _candidate, ...row } = item;
+        void _candidate;
+        return { ...publicResume(row), overview: resumeOverview(item) };
+      }),
       total,
       page,
       pages: Math.ceil(total / limit),

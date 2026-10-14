@@ -24,14 +24,39 @@ export async function GET(
     include: {
       extraction: true,
       candidate: { include: candidateInclude },
+      extractionRuns: {
+        where: { method: "HUMAN" },
+        orderBy: { startedAt: "desc" },
+        take: 100,
+        select: {
+          evidence: {
+            where: { verifiedAt: { not: null } },
+            select: { fieldPath: true },
+            take: 200,
+          },
+        },
+      },
       errors: { orderBy: { createdAt: "desc" }, take: 5 },
     },
   });
-  return resume
-    ? Response.json(publicResume(resume), {
-        headers: { "cache-control": "no-store" },
-      })
-    : Response.json({ error: "Resume not found." }, { status: 404 });
+  if (!resume)
+    return Response.json({ error: "Resume not found." }, { status: 404 });
+  const { extractionRuns, ...record } = resume;
+  return Response.json(
+    {
+      ...publicResume(record),
+      manualFields: [
+        ...new Set(
+          (extractionRuns ?? []).flatMap((run) =>
+            run.evidence.map((e) => e.fieldPath),
+          ),
+        ),
+      ],
+    },
+    {
+      headers: { "cache-control": "no-store" },
+    },
+  );
 }
 export async function PATCH(
   request: Request,

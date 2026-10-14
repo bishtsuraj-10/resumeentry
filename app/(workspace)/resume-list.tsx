@@ -3,20 +3,10 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useCan } from "./workspace-access";
 import StatusBadge from "./status-badge";
+import { experienceLabel } from "@/lib/resume-review";
+import type { ResumeOverviewRow } from "@/lib/resume-overview";
 
-type ResumeRow = {
-  id: string;
-  fileName: string;
-  status: string;
-  createdAt: string;
-  extraction: null | {
-    name: string | null;
-    email: string | null;
-    phone: string | null;
-    designation: string | null;
-    overallConfidence: number;
-  };
-};
+type ResumeRow = ResumeOverviewRow;
 export default function ResumeList({
   title,
   status,
@@ -28,6 +18,8 @@ export default function ResumeList({
   const showSummary = can("dashboard.view");
   const [items, setItems] = useState<ResumeRow[]>([]);
   const [search, setSearch] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const activeStatus = status || filterStatus;
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(1);
@@ -39,12 +31,12 @@ export default function ResumeList({
     review: number;
   } | null>(null);
   const [summaryError, setSummaryError] = useState(false);
-  const requestKey = JSON.stringify([page, search, status]);
+  const requestKey = JSON.stringify([page, search, activeStatus]);
   const loading = loadedKey !== requestKey;
   useEffect(() => {
     const controller = new AbortController();
     const params = new URLSearchParams({ page: String(page), limit: "25" });
-    if (status) params.set("status", status);
+    if (activeStatus) params.set("status", activeStatus);
     if (search) params.set("search", search);
     void fetch(`/api/resumes?${params}`, { signal: controller.signal })
       .then(async (response) => {
@@ -66,7 +58,7 @@ export default function ResumeList({
         }
       });
     return () => controller.abort();
-  }, [page, search, status, requestKey]);
+  }, [page, search, activeStatus, requestKey]);
   useEffect(() => {
     if (status || !showSummary) return;
     const controller = new AbortController();
@@ -181,6 +173,35 @@ export default function ResumeList({
               }}
             />
           </label>
+          {!status && (
+            <label>
+              Processing status
+              <select
+                className="tool-input"
+                aria-label="Filter by processing status"
+                value={filterStatus}
+                onChange={(e) => {
+                  setFilterStatus(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">All statuses</option>
+                {[
+                  "PENDING",
+                  "PROCESSING",
+                  "COMPLETED",
+                  "REVIEW",
+                  "FAILED",
+                  "DUPLICATE",
+                  "CANCELLED",
+                ].map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {can("resumes.export") && (
             <Link href="/export" className="filter-button">
               ⇩ Export
@@ -201,9 +222,14 @@ export default function ResumeList({
                 <th>EMAIL</th>
                 <th>PHONE</th>
                 <th>DESIGNATION</th>
+                <th>LOCATION</th>
+                <th>EXPERIENCE</th>
+                <th>TOP SKILLS</th>
+                <th>HIGHEST IDENTIFIED EDUCATION</th>
                 <th>CONFIDENCE</th>
                 <th>STATUS</th>
                 <th>CREATED</th>
+                <th>ACTION</th>
               </tr>
             </thead>
             <tbody>
@@ -217,29 +243,53 @@ export default function ResumeList({
                         href={`/resumes/${row.id}`}
                       >
                         <span className="candidate-avatar tone-violet">
-                          {(row.extraction?.name ?? "CV")
+                          {(row.overview?.name ?? row.extraction?.name ?? "CV")
                             .slice(0, 2)
                             .toUpperCase()}
                         </span>
                         <div>
-                          <b>{row.extraction?.name ?? "Needs review"}</b>
+                          <b>
+                            {row.overview?.name ??
+                              row.extraction?.name ??
+                              "Identity not identified"}
+                          </b>
                           <span>{row.fileName}</span>
                         </div>
                       </Link>
                     </td>
                     <td>{row.extraction?.email ?? "—"}</td>
                     <td>{row.extraction?.phone ?? "—"}</td>
-                    <td>{row.extraction?.designation ?? "—"}</td>
                     <td>
-                      {Math.round(
-                        (row.extraction?.overallConfidence ?? 0) * 100,
-                      )}
-                      %
+                      {row.overview?.designation ??
+                        row.extraction?.designation ??
+                        "—"}
+                    </td>
+                    <td>{row.overview?.location ?? "—"}</td>
+                    <td>
+                      {experienceLabel(row.overview?.totalExperienceMonths)}
+                    </td>
+                    <td>
+                      <span className="resume-table-skills">
+                        {row.overview?.skills.join(", ") || "—"}
+                      </span>
+                    </td>
+                    <td>{row.overview?.education ?? "—"}</td>
+                    <td>
+                      {row.extraction
+                        ? `${Math.round(row.extraction.overallConfidence * 100)}%`
+                        : "—"}
                     </td>
                     <td>
                       <StatusBadge status={row.status} />
                     </td>
                     <td>{new Date(row.createdAt).toLocaleDateString()}</td>
+                    <td>
+                      <Link href={`/resumes/${row.id}`} className="back-link">
+                        {row.status === "REVIEW" && can("resumes.edit")
+                          ? "Review"
+                          : "View"}
+                      </Link>
+                    </td>
                   </tr>
                 ))}
             </tbody>

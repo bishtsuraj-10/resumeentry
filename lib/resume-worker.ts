@@ -1,11 +1,8 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import type { PrismaClient } from "@prisma/client";
-import {
-  ConfiguredAIParser,
-  extractResumeFields,
-  LocalResumeParser,
-} from "./resume-parser";
+import { extractStructuredResume, LocalResumeParser } from "./resume-parser";
+import { reviewDecision } from "./resume-parser/review-policy";
 import {
   claimResume,
   classifyError,
@@ -17,7 +14,6 @@ import {
 } from "./processing";
 
 const parser = new LocalResumeParser();
-const aiParser = new ConfiguredAIParser();
 export async function runResumeJob(
   db: PrismaClient,
   data: { resumeId: string; generation?: number },
@@ -26,15 +22,20 @@ export async function runResumeJob(
   if (!resume?.claimToken) return "skipped";
   const token = resume.claimToken;
   let lost = false;
+  const controller = new AbortController();
   let renewing: Promise<void> | undefined;
   const timer = setInterval(() => {
     if (lost || renewing) return;
     renewing = renewClaim(db, resume.id, token)
       .then((valid) => {
-        if (!valid) lost = true;
+        if (!valid) {
+          lost = true;
+          controller.abort();
+        }
       })
       .catch(() => {
         lost = true;
+        controller.abort();
       })
       .finally(() => {
         renewing = undefined;
@@ -52,32 +53,16 @@ export async function runResumeJob(
     if (hash.digest("hex") !== resume.fileHash)
       throw new PermanentProcessingError("FILE_HASH_MISMATCH");
     if (!(await check())) return "skipped";
-    const { text, usedOcr } = await parser.extractText(resume.filePath);
+    const document = await parser.extractText(resume.filePath, {
+      signal: controller.signal,
+    });
+    const { text, usedOcr } = document;
     if (!(await check())) return "skipped";
     if (!text.trim()) throw new PermanentProcessingError("EMPTY_DOCUMENT");
-    const extraction = extractResumeFields(text, resume.fileName);
-    let assisted = false;
-    try {
-      const ai =
-        extraction.nameConfidence < 0.6 ||
-        extraction.designationConfidence < 0.6
-          ? await aiParser.parseResume(text)
-          : {};
-      if (ai.name && extraction.nameConfidence < 0.6) {
-        assisted = true;
-        extraction.name = ai.name;
-        extraction.nameConfidence = 0.8;
-      }
-      if (ai.designation && extraction.designationConfidence < 0.6) {
-        assisted = true;
-        extraction.designation = ai.designation;
-        extraction.designationConfidence = 0.8;
-      }
-    } catch {
-      console.warn(
-        JSON.stringify({ event: "ai_parsing_failed", resumeId: resume.id }),
-      );
-    }
+    const structured = extractStructuredResume(text, {
+      documentWarnings: document.warnings,
+    });
+    const extraction = structured.basic;
     if (!(await check())) return "skipped";
     extraction.overallConfidence =
       (extraction.nameConfidence +
@@ -85,13 +70,7 @@ export async function runResumeJob(
         extraction.phoneConfidence +
         extraction.designationConfidence) /
       4;
-    const threshold = Number(process.env.CONFIDENCE_THRESHOLD ?? 75) / 100;
-    const requiresReview =
-      extraction.overallConfidence < threshold ||
-      !extraction.name ||
-      !extraction.email ||
-      !extraction.phone ||
-      !extraction.designation;
+    const { requiresReview } = reviewDecision(extraction, structured.warnings);
     const finalized = await finalizeResume(
       db,
       resume.id,
@@ -99,9 +78,10 @@ export async function runResumeJob(
       extraction,
       requiresReview,
       {
-        parserVersion: "local-basic-v1",
+        parserVersion: structured.parserVersion,
         startedAt: resume.updatedAt,
-        method: assisted ? "HYBRID" : "LOCAL",
+        method: "LOCAL",
+        structured,
       },
     );
     if (finalized)
@@ -110,6 +90,10 @@ export async function runResumeJob(
           event: "resume_processing_completed",
           resumeId: resume.id,
           usedOcr,
+          ocrPages: document.ocrPages,
+          documentMs: document.durationMs,
+          extractionMs: Math.round(structured.durationMs),
+          warningCount: structured.warnings.length,
         }),
       );
     return finalized ? "completed" : "skipped";
