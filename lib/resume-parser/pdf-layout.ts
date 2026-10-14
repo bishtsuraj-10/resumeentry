@@ -2,6 +2,8 @@
 // Use public PDF.js APIs for text, retaining pdf-parse for selective raster rendering.
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { DocumentLimitError } from "./document-limits";
+import { heading } from "./section-detector";
+import { safeUrlSchema } from "../candidate-validation";
 export async function readPdfLayout(
   data: Buffer,
   maxPages: number,
@@ -98,8 +100,14 @@ export async function readPdfLayout(
             r.items.some((i) => i.x < split) &&
             r.items.some((i) => i.x >= split),
         );
-        const header = rows.slice(0, firstPair),
-          body = rows.slice(firstPair).filter((r) => r.y >= 55),
+        // A column heading can precede the first horizontally paired row.
+        // Keep it with its lane, rather than treating it as a shared header.
+        const firstHeading = rows.findIndex((r) =>
+          r.items.some((i) => heading(i.text) !== null),
+        );
+        const firstBody = firstHeading >= 0 ? Math.min(firstPair, firstHeading) : firstPair;
+        const header = rows.slice(0, firstBody),
+          body = rows.slice(firstBody).filter((r) => r.y >= 55),
           footer = rows.filter((r) => r.y < 55);
         const lane = (left: boolean) =>
           body
@@ -109,6 +117,21 @@ export async function readPdfLayout(
             }))
             .filter((r) => r.items.length);
         orderedRows = [...header, ...lane(true), ...lane(false), ...footer];
+      }
+      // Resolve clickable labels at their original position so section ownership
+      // survives column ordering. Never append unplaced destinations to the header.
+      const annotations = await page.getAnnotations({ intent: "display" });
+      if (annotations.length > 1000) throw new DocumentLimitError();
+      for (const annotation of annotations) {
+        const url = safeUrlSchema.safeParse(annotation.url);
+        if (!url.success || !Array.isArray(annotation.rect)) continue;
+        const [x0, y0, x1, y1] = annotation.rect as number[];
+        const row = rows.find((r) => r.y >= y0 - 3 && r.y <= y1 + 3);
+        const item = row?.items.find((i) => i.x < x1 && i.x + i.width > x0);
+        if (!item) continue;
+        const visible = url.data.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/$/, "");
+        if (!item.text.includes(visible) && !item.text.includes(url.data))
+          item.text += ` (${url.data})`;
       }
       const text = orderedRows
         .map((row) => {

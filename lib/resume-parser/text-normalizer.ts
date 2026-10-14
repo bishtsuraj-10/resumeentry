@@ -3,6 +3,16 @@ export interface SourceLine {
   line: number;
   page: number;
 }
+function wrappedPlace(previous: string, next: string) {
+  if (!/,|^(?:location|address|based in)\s*:/i.test(previous)) return false;
+  return ["United States", "United Kingdom", "United Arab Emirates", "South Africa", "New Zealand", "District of Columbia"].some(place => {
+    const words = place.split(" ");
+    return words.slice(1).some((_, index) =>
+      new RegExp(`\\b${words.slice(0, index + 1).join(" ")}$`, "i").test(previous) &&
+      new RegExp(`^${words.slice(index + 1).join(" ")}(?:,\\s*[\\p{L} .'-]+)?$`, "iu").test(next),
+    );
+  });
+}
 export function normalizeText(text: string): SourceLine[] {
   let page = 1;
   let pageLine = 0;
@@ -39,8 +49,7 @@ export function normalizeText(text: string): SourceLine[] {
     const previous = lines[lines.length - 1];
     if (
       previous?.page === page &&
-      /,.*\b(?:United|South|New)$/i.test(previous.text) &&
-      /^(?:States|Kingdom|Emirates|Africa|Zealand)$/i.test(value)
+      wrappedPlace(previous.text, value)
     )
       previous.text += " " + value;
     else if (

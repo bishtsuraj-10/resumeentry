@@ -64,6 +64,7 @@ function namedBlocks(lines: SectionLine[], section: Section): SectionLine[][] {
       ) ||
       Boolean(dateRange(line.text)) ||
       Boolean(parseDate(line.text)) ||
+      /^(?:credential|verify(?: credential| certificate)?|verification|website|url|link)\s*\(https?:\/\//i.test(line.text) ||
       /^https?:\/\//i.test(line.text);
     const issuerContinuation =
       section === "certifications" &&
@@ -192,6 +193,14 @@ export function extractRecords(lines: SectionLine[]) {
     const source = lines
       .filter((l) => l.section === "employment" || l.section === "internships")
       .filter((l) => !/^Start\s*\|\s*End\s*\|/i.test(l.text))
+      .filter((l) => {
+        const cells = l.text.split(/\s*\|\s*/);
+        // Column labels are not a preceding employment header. Leaving them in
+        // the block hides the actual role/employer carried beside its dates.
+        return !(cells.length >= 3 && cells.every(c =>
+          /^(?:employer|company|organization|designation|job title|role|dates?|start|end|start date|end date|location|employment type)$/i.test(c),
+        ));
+      })
       .map((l) => {
         const cells = l.text.split(/\s*\|\s*/);
         return cells.length >= 2 &&
@@ -509,6 +518,7 @@ export function extractRecords(lines: SectionLine[]) {
       issuer:
         labeled(block, "issuer|issued by|issuing organization") ??
         (block[1] &&
+        !url([block[1]]) &&
         !/^(?:issue date|issued|expiry|credential)\s*:/i.test(block[1].text)
           ? block[1].text
           : null),

@@ -67,7 +67,7 @@ describe.skipIf(!url)(
         where: { resumeId: r.id },
         include: { evidence: true },
       });
-      expect(run.parserVersion).toBe("local-comprehensive-v1.1");
+      expect(run.parserVersion).toBe("local-comprehensive-v1.2");
       expect(run.method).toBe("LOCAL");
       expect(
         run.evidence.some((e) =>

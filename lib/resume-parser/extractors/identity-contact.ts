@@ -1,13 +1,16 @@
-import { extractResumeFields } from "../basic";
+import { extractResumeFields, jobTitle } from "../basic";
+import { heading } from "../section-detector";
 import { evidence, type MachineEvidence } from "../field-confidence";
 import type { SectionLine } from "../section-detector";
 import { parseDate } from "../validators/dates";
 import { meaningfulReviewText } from "../review-policy";
+const indianRegions = "Andhra Pradesh|Arunachal Pradesh|Assam|Bihar|Chhattisgarh|Goa|Gujarat|Haryana|Himachal Pradesh|Jharkhand|Karnataka|Kerala|Madhya Pradesh|Maharashtra|Manipur|Meghalaya|Mizoram|Nagaland|Odisha|Punjab|Rajasthan|Sikkim|Tamil Nadu|Telangana|Tripura|Uttar Pradesh|Uttarakhand|West Bengal|Delhi|Chandigarh|Jammu and Kashmir|Ladakh|Puducherry|Andaman and Nicobar Islands|Lakshadweep|Dadra and Nagar Haveli and Daman and Diu";
+const indianRegionLine = new RegExp(`^(?:${indianRegions})(?:\\s+\\d{6})?$`, "i");
 export function extractIdentityContact(lines: SectionLine[]) {
   const contactLines = lines.filter(
     (l) =>
       ["header", "personal"].includes(l.section) &&
-      !/\b(?:reference|referee|recruiter|company email|employer contact)\b/i.test(
+      !/\b(?:reference|referee|recruiter|company email|employer contact|(?:employer|company|university|institution|project)\s+(?:address|location))\b/i.test(
         l.text,
       ),
   );
@@ -74,7 +77,24 @@ export function extractIdentityContact(lines: SectionLine[]) {
       );
   }
   const locationComponents = new Map<string, { value: string; line: SectionLine }>();
-  for (const line of contactLines) {
+  for (const [index, original] of contactLines.entries()) {
+    const line = { ...original };
+    const explicitlyLocated = /^(?:location|address|based in)\s*:/i.test(line.text);
+    // Continue labelled addresses only through adjacent, address-shaped lines.
+    // Preserve source spelling; other contact fields and section headings stop it.
+    if (explicitlyLocated) {
+      for (let offset = 1; offset <= 3; offset++) {
+        const next = contactLines[index + offset];
+        const previous = contactLines[index + offset - 1];
+        if (!next || next.page !== original.page || next.line !== previous.line + 1 ||
+            heading(next.text) || jobTitle(next.text) || /[:@/]/.test(next.text) ||
+            !/^[\p{L}\d .,'-]+$/u.test(next.text) ||
+            !(/,/.test(next.text) || /\b\d{5,6}\b/.test(next.text) || indianRegionLine.test(next.text) ||
+              /^(?:location|address|based in)\s*:\s*$/i.test(line.text) ||
+              /^(?:India|United States|United Kingdom|Canada|Australia|United Arab Emirates|South Africa|New Zealand)$/i.test(next.text))) break;
+        line.text += /[:,]\s*$/.test(line.text) ? " " + next.text : ", " + next.text;
+      }
+    }
     const location = line.text.match(
       /^(?:location|address|based in)\s*:\s*(.+)$/i,
     );
@@ -89,7 +109,8 @@ export function extractIdentityContact(lines: SectionLine[]) {
     if (
       !location &&
       !profile.locationText &&
-      /^[\p{L} .'-]+,\s*[\p{L} .'-]+(?:,\s*[\p{L} .'-]+)?$/u.test(line.text) &&
+      (/^[\p{L} .'-]+,\s*[\p{L} .'-]+(?:,\s*[\p{L} .'-]+)?$/u.test(line.text) ||
+       /^[\p{L} .,'-]+\s+\d{6}(?:,?\s+India)?$/u.test(line.text)) &&
       !line.text.includes("@")
     ) {
       profile.locationText = line.text.slice(0, 500);
