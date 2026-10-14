@@ -12,13 +12,13 @@ describe("review workspace drafts", () => {
   it("merges separate records and only submitted fields into one valid revision-safe patch", () => {
     const changes = mergeReviewDrafts([
       { basic: { designation: "Engineer" } },
-      { profile: { city: "Delhi" } },
+      { profile: { locationText: "Delhi" } },
       { employment: { upsert: [{ id: "job-1", employer: "Example" }] } },
       { employment: { upsert: [{ id: "job-1", location: "Remote" }] } },
       { employment: { upsert: [{ id: "job-2", designation: "Developer" }] } },
       { skills: { upsert: [{ name: "SQL", context: "Work" }] } },
     ]);
-    expect(changes).toEqual({ basic: { designation: "Engineer" }, profile: { city: "Delhi" }, employment: { upsert: [{ id: "job-1", employer: "Example", location: "Remote" }, { id: "job-2", designation: "Developer" }] }, skills: { upsert: [{ name: "SQL", context: "Work" }] } });
+    expect(changes).toEqual({ basic: { designation: "Engineer" }, profile: { locationText: "Delhi" }, employment: { upsert: [{ id: "job-1", employer: "Example", location: "Remote" }, { id: "job-2", designation: "Developer" }] }, skills: { upsert: [{ name: "SQL", context: "Work" }] } });
     expect(candidatePatchSchema.safeParse({ expectedRevision: 3, ...changes }).success).toBe(true);
     expect(changes).not.toHaveProperty("completeReview");
     expect(changes.basic).not.toHaveProperty("email");

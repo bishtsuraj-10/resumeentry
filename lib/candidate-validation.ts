@@ -174,21 +174,6 @@ const changeSet = <T extends z.ZodType>(item: T) =>
     remove: z.array(id).max(100).optional(),
   });
 
-const phoneSchema = text(40).transform((value, ctx) => {
-  const phone = parsePhoneNumberFromString(value);
-  if (!phone?.isValid()) {
-    ctx.addIssue({
-      code: "custom",
-      message: "Use a valid international phone number",
-    });
-    return z.NEVER;
-  }
-  return {
-    originalText: value,
-    normalizedPhone: phone.number,
-    countryCode: "+" + phone.countryCallingCode,
-  };
-});
 const dobSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -228,22 +213,6 @@ export const candidatePatchSchema = z
     completeReview: z.literal(true).optional(),
     profile: z
       .strictObject({
-        firstName: nullable(),
-        lastName: nullable(),
-        additionalEmails: z
-          .array(
-            z
-              .string()
-              .trim()
-              .email()
-              .transform((v) => v.toLowerCase()),
-          )
-          .max(20)
-          .optional(),
-        additionalPhones: z.array(phoneSchema).max(20).optional(),
-        city: nullable(),
-        region: nullable(),
-        country: nullable(),
         locationText: nullable(500),
         dateOfBirth: dobSchema.nullable().optional(),
         headline: nullable(500),

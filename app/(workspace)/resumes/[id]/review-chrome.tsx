@@ -64,8 +64,8 @@ export function CandidateHeader({ record, editable, downloadable, busy, refreshR
   save: () => void; complete: () => void; reload: () => void;
 }) {
   const basic = record.extraction, profile = record.candidate;
-  const name = basic?.name || [profile?.firstName, profile?.lastName].filter(Boolean).join(" ") || "Candidate identity needs review";
-  const location = profile?.locationText || [profile?.city, profile?.region, profile?.country].filter(Boolean).join(", ") || "Location not identified";
+  const name = basic?.name || "Candidate identity needs review";
+  const location = profile?.locationText || "Location not identified";
   return <header className="tool-header candidate-sticky-header">
     <div className="candidate-identity">
       <Link href="/resumes" className="back-link">← All resumes</Link>

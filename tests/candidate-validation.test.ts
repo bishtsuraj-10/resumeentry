@@ -4,7 +4,7 @@ import { readCandidateBody } from "../lib/candidate-http";
 
 describe("candidate validation", () => {
   it("accepts unknown fields as null and empty collections", () => {
-    expect(candidatePatchSchema.parse({ expectedRevision: 0, profile: { firstName: null, summary: null, employmentPreferences: [] } }).profile?.summary).toBeNull();
+    expect(candidatePatchSchema.parse({ expectedRevision: 0, profile: {  summary: null, employmentPreferences: [] } }).profile?.summary).toBeNull();
   });
   it("preserves year-only, month-year and original date text", () => {
     expect(partialDateSchema.parse({ year: 2021 })).toEqual({ year: 2021 });
@@ -23,14 +23,19 @@ describe("candidate validation", () => {
   });
   it("rejects mass assignment of processing, confidence and verification fields", () => {
     for (const field of ["status", "resumeId", "claimToken", "parserVersion", "reviewedAt"])
-      expect(candidatePatchSchema.safeParse({ expectedRevision: 0, [field]: "injected", profile: { city: "Example" } }).success).toBe(false);
+      expect(candidatePatchSchema.safeParse({ expectedRevision: 0, [field]: "injected", profile: { locationText: "Example" } }).success).toBe(false);
     expect(candidatePatchSchema.safeParse({ expectedRevision: 0, employment: { upsert: [{ confidence: 1 }] } }).success).toBe(false);
   });
-  it("normalizes email and phone collections without inventing country codes", () => {
-    const result = candidatePatchSchema.parse({ expectedRevision: 0, profile: { additionalEmails: ["TEST@EXAMPLE.COM"], additionalPhones: ["+91 98765 43210"] } });
-    expect(result.profile?.additionalEmails).toEqual(["test@example.com"]);
-    expect(result.profile?.additionalPhones?.[0].normalizedPhone).toBe("+919876543210");
-    expect(candidatePatchSchema.safeParse({ expectedRevision: 0, profile: { additionalPhones: ["9876543210"] } }).success).toBe(false);
+  it("normalizes primary email and validates international primary phones", () => {
+    const result = candidatePatchSchema.parse({ expectedRevision: 0, basic: { email: "TEST@EXAMPLE.COM", phone: "+91 98765 43210" } });
+    expect(result.basic?.email).toBe("test@example.com");
+    expect(candidatePatchSchema.safeParse({ expectedRevision: 0, basic: { phone: "9876543210" } }).success).toBe(false);
+  });
+  it.each(["firstName", "lastName", "additionalEmails", "additionalPhones", "city", "region", "country"])("rejects retired profile field %s", field => {
+    expect(candidatePatchSchema.safeParse({ expectedRevision: 0, profile: { [field]: null, locationText: "Example" } }).success).toBe(false);
+  });
+  it("rejects retired otherEmails in primary corrections", () => {
+    expect(candidatePatchSchema.safeParse({ expectedRevision: 0, basic: { name: "Synthetic Name", otherEmails: [] } }).success).toBe(false);
   });
   it("requires explicitly supplied valid DOB and bounded experience", () => {
     expect(candidatePatchSchema.safeParse({ expectedRevision: 0, profile: { dateOfBirth: "2001-02-29" } }).success).toBe(false);
@@ -45,7 +50,7 @@ describe("candidate validation", () => {
   });
   it("bounds nested entries, evidence and additional JSON", () => {
     expect(candidatePatchSchema.safeParse({ expectedRevision: 0, employment: { upsert: Array.from({ length: 101 }, () => ({})) } }).success).toBe(false);
-    expect(candidatePatchSchema.safeParse({ expectedRevision: 0, profile: { city: "Example", evidence: [{ text: "x".repeat(501) }] } }).success).toBe(false);
+    expect(candidatePatchSchema.safeParse({ expectedRevision: 0, profile: { locationText: "Example", evidence: [{ text: "x".repeat(501) }] } }).success).toBe(false);
     expect(candidatePatchSchema.safeParse({ expectedRevision: 0, additional: { upsert: [{ type: "AWARD", details: { arbitrary: {} } }] } }).success).toBe(false);
     expect(candidatePatchSchema.safeParse({ expectedRevision: 0, projects: { upsert: Array.from({ length: 5 }, () => ({
       skills: Array.from({ length: 50 }, (_, i) => ({ name: "Skill " + i })),

@@ -12,16 +12,13 @@ import {
 } from "../lib/resume-parser";
 import { actualField, evaluationFields } from "../lib/resume-parser/evaluation";
 import { reviewDecision } from "../lib/resume-parser/review-policy";
+import { accuracyValues, expectedAccuracyFields, type AccuracyCase } from "../lib/resume-parser/corpus-accuracy";
 
 interface Truth {
   asOfDate: string;
-  resumes: {
-    id: string;
-    file: string;
-    sha256: string;
-    expectedFields: Record<string, unknown>;
+  resumes: (AccuracyCase & {
     pageTranscripts: { text: string }[];
-  }[];
+  })[];
 }
 type Count = { tp: number; fp: number; fn: number; missingFields: number };
 type Evaluated = {
@@ -43,8 +40,8 @@ function comparison(
 ) {
   return Object.fromEntries(
     evaluationFields.map((field) => {
-      const e = values(expected[field]),
-        a = values(actual[field]),
+      const e = field.endsWith(".url") ? accuracyValues(expected[field], true) : values(expected[field]),
+        a = field.endsWith(".url") ? accuracyValues(actual[field], true) : values(actual[field]),
         tp = [...a].filter((v) => e.has(v)).length;
       return [
         field,
@@ -132,11 +129,18 @@ async function main() {
       );
       const entry = {
         id: item.id,
-        fields: comparison(item.expectedFields, actual),
+        fields: comparison(expectedAccuracyFields(item), actual),
         identity: actual["basic.name"],
         designation: actual["basic.designation"],
         warnings: parsed.warnings,
-        review: reviewDecision(parsed.basic, parsed.warnings),
+        // Offline prediction only; production finalization reads these relations
+        // back from the database after applying the first-fill persistence policy.
+        review: reviewDecision(parsed.basic, {
+          locationText: parsed.candidate.profile?.locationText ?? null,
+          summary: parsed.candidate.profile?.summary ?? null,
+          skills: (parsed.candidate.skills?.upsert ?? []).map((skill) => ({ skill: { canonicalName: skill.name } })),
+          links: (parsed.candidate.links?.upsert ?? []).map((link) => ({ url: link.url ?? "" })),
+        }),
         coverage: Object.fromEntries(
           (
             [
@@ -267,7 +271,7 @@ async function main() {
         }
         persisted.push({
           id: item.id,
-          fields: comparison(item.expectedFields, a),
+          fields: comparison(expectedAccuracyFields(item), a),
           status: row.status,
           requiresReview: row.extraction?.requiresReview ?? null,
           confidence: row.extraction?.overallConfidence ?? null,

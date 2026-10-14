@@ -16,15 +16,10 @@ const textFields = (...keys: string[]): Field[] =>
 export const identityFields = textFields("name", "email", "phone", "designation");
 export const profileFields: Field[] = [
   ...textFields(
-    "firstName",
-    "lastName",
     "headline",
     "summary",
     "objective",
     "locationText",
-    "city",
-    "region",
-    "country",
     "noticePeriod",
     "dateOfBirth",
   ),
@@ -33,7 +28,7 @@ export const profileFields: Field[] = [
     label: "Experience in months",
     kind: "number",
   },
-  ...["employmentPreferences", "additionalEmails", "additionalPhones"].map(
+  ...["employmentPreferences"].map(
     (key) => ({
       key,
       label: key.replace(/([A-Z])/g, " $1"),

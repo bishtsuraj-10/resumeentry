@@ -108,7 +108,6 @@ export async function loadResume(
       "certifications",
       "links",
       "additional",
-      "additionalEmails",
       "employmentPreferences",
     ].some(
       (key) =>

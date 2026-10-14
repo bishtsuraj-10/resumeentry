@@ -23,9 +23,14 @@ export function extractProfessional(lines: SectionLine[]) {
       );
     }
   }
-  const safe = lines.filter((l) =>
-    ["header", "summary", "employment"].includes(l.section),
-  );
+  const safe = lines.filter((l) => {
+    if (!["header", "summary", "employment"].includes(l.section)) return false;
+    if (l.section !== "summary") return true;
+    // A leading self-description can state a role; mentioning a colleague or
+    // desired role later in a summary does not establish the candidate's title.
+    const title = extractResumeFields(l.text).designation;
+    return Boolean(title && l.text.toLowerCase().startsWith(title.toLowerCase()));
+  });
   const designation = extractResumeFields(safe.map((l) => l.text).join("\n"));
   const headerTitle = lines.find(
     (l) => l.section === "header" && extractResumeFields(l.text).designation,

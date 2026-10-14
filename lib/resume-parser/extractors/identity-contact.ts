@@ -1,13 +1,16 @@
-import { extractResumeFields } from "../basic";
-import { parsePhoneNumberFromString } from "libphonenumber-js/max";
+import { extractResumeFields, jobTitle } from "../basic";
+import { heading } from "../section-detector";
 import { evidence, type MachineEvidence } from "../field-confidence";
 import type { SectionLine } from "../section-detector";
 import { parseDate } from "../validators/dates";
+import { meaningfulReviewText } from "../review-policy";
+const indianRegions = "Andhra Pradesh|Arunachal Pradesh|Assam|Bihar|Chhattisgarh|Goa|Gujarat|Haryana|Himachal Pradesh|Jharkhand|Karnataka|Kerala|Madhya Pradesh|Maharashtra|Manipur|Meghalaya|Mizoram|Nagaland|Odisha|Punjab|Rajasthan|Sikkim|Tamil Nadu|Telangana|Tripura|Uttar Pradesh|Uttarakhand|West Bengal|Delhi|Chandigarh|Jammu and Kashmir|Ladakh|Puducherry|Andaman and Nicobar Islands|Lakshadweep|Dadra and Nagar Haveli and Daman and Diu";
+const indianRegionLine = new RegExp(`^(?:${indianRegions})(?:\\s+\\d{6})?$`, "i");
 export function extractIdentityContact(lines: SectionLine[]) {
   const contactLines = lines.filter(
     (l) =>
       ["header", "personal"].includes(l.section) &&
-      !/\b(?:reference|referee|recruiter|company email|employer contact)\b/i.test(
+      !/\b(?:reference|referee|recruiter|company email|employer contact|(?:employer|company|university|institution|project)\s+(?:address|location))\b/i.test(
         l.text,
       ),
   );
@@ -47,23 +50,6 @@ export function extractIdentityContact(lines: SectionLine[]) {
           basic.nameConfidence,
         ),
       );
-      const words = basic.name.split(" ");
-      // Multi-token family names and initials remain unsplit rather than guessed.
-      if (
-        words.length === 2 &&
-        words.every(
-          (w) =>
-            /^\p{L}[\p{L}'-]*$/u.test(w) &&
-            (w.match(/\p{L}/gu) ?? []).length >= 2,
-        )
-      ) {
-        profile.firstName = words[0];
-        profile.lastName = words[1];
-        proofs.push(
-          evidence("profile.firstName", line, ["TWO_TOKEN_NAME"], 0.78),
-          evidence("profile.lastName", line, ["TWO_TOKEN_NAME"], 0.78),
-        );
-      }
     } else {
       basic.name = null;
       basic.nameConfidence = 0;
@@ -90,23 +76,24 @@ export function extractIdentityContact(lines: SectionLine[]) {
         ),
       );
   }
-  const phones = new Map<
-    string,
-    {
-      originalText: string;
-      normalizedPhone: string;
-      countryCode: string;
-    }
-  >();
-  for (const line of contactLines) {
-    for (const value of line.text.match(/\+\d[\d ().-]{7,}\d/g) ?? []) {
-      const phone = parsePhoneNumberFromString(value);
-      if (phone?.isValid() && phone.number !== basic.normalizedPhone)
-        phones.set(phone.number, {
-          originalText: value,
-          normalizedPhone: phone.number,
-          countryCode: "+" + phone.countryCallingCode,
-        });
+  const locationComponents = new Map<string, { value: string; line: SectionLine }>();
+  for (const [index, original] of contactLines.entries()) {
+    const line = { ...original };
+    const explicitlyLocated = /^(?:location|address|based in)\s*:/i.test(line.text);
+    // Continue labelled addresses only through adjacent, address-shaped lines.
+    // Preserve source spelling; other contact fields and section headings stop it.
+    if (explicitlyLocated) {
+      for (let offset = 1; offset <= 3; offset++) {
+        const next = contactLines[index + offset];
+        const previous = contactLines[index + offset - 1];
+        if (!next || next.page !== original.page || next.line !== previous.line + 1 ||
+            heading(next.text) || jobTitle(next.text) || /[:@/]/.test(next.text) ||
+            !/^[\p{L}\d .,'-]+$/u.test(next.text) ||
+            !(/,/.test(next.text) || /\b\d{5,6}\b/.test(next.text) || indianRegionLine.test(next.text) ||
+              /^(?:location|address|based in)\s*:\s*$/i.test(line.text) ||
+              /^(?:India|United States|United Kingdom|Canada|Australia|United Arab Emirates|South Africa|New Zealand)$/i.test(next.text))) break;
+        line.text += /[:,]\s*$/.test(line.text) ? " " + next.text : ", " + next.text;
+      }
     }
     const location = line.text.match(
       /^(?:location|address|based in)\s*:\s*(.+)$/i,
@@ -116,14 +103,14 @@ export function extractIdentityContact(lines: SectionLine[]) {
       proofs.push(
         evidence("profile.locationText", line, ["EXPLICIT_LABEL"], 0.94),
       );
-      // Structured location requires labelled components; commas alone do not identify a state/country.
     }
     // Preserve clearly formatted, unlabelled header locations as text only.
     // Do not guess which comma-separated component is a state or country.
     if (
       !location &&
       !profile.locationText &&
-      /^[\p{L} .'-]+,\s*[\p{L} .'-]+(?:,\s*[\p{L} .'-]+)?$/u.test(line.text) &&
+      (/^[\p{L} .'-]+,\s*[\p{L} .'-]+(?:,\s*[\p{L} .'-]+)?$/u.test(line.text) ||
+       /^[\p{L} .,'-]+\s+\d{6}(?:,?\s+India)?$/u.test(line.text)) &&
       !line.text.includes("@")
     ) {
       profile.locationText = line.text.slice(0, 500);
@@ -149,22 +136,10 @@ export function extractIdentityContact(lines: SectionLine[]) {
       states.some((s) => s.toLowerCase() === parts[1].toLowerCase()) &&
       /^[\p{L} .'-]+$/u.test(parts[0])
     ) {
-      for (const [key, value] of [
-        ["city", parts[0]],
-        ["region", parts[1]],
-        ["country", "United States"],
-      ])
-        if (!profile[key]) {
-          profile[key] = value;
-          proofs.push(
-            evidence(
-              "profile." + key,
-              line,
-              ["HEADER_LOCATION", "RECOGNIZED_COUNTRY_AND_REGION"],
-              0.88,
-            ),
-          );
-        }
+      if (!profile.locationText) {
+        profile.locationText = line.text.replace(/^(?:location|address|based in)\s*:\s*/i, "").slice(0, 500);
+        proofs.push(evidence("profile.locationText", line, ["HEADER_LOCATION", "RECOGNIZED_COUNTRY_AND_REGION"], 0.88));
+      }
     }
     for (const [key, label] of [
       ["city", "city"],
@@ -173,8 +148,8 @@ export function extractIdentityContact(lines: SectionLine[]) {
     ]) {
       const m = line.text.match(new RegExp(`^(?:${label})\\s*:\\s*(.+)$`, "i"));
       if (m) {
-        profile[key] = m[1].slice(0, 200);
-        proofs.push(evidence("profile." + key, line, ["EXPLICIT_LABEL"], 0.96));
+        const value = m[1].slice(0, 200);
+        if (meaningfulReviewText(value)) locationComponents.set(key, { value, line });
       }
     }
     const dob = line.text.match(
@@ -200,24 +175,12 @@ export function extractIdentityContact(lines: SectionLine[]) {
       }
     }
   }
-  if (basic.otherEmails.length) {
-    profile.additionalEmails = basic.otherEmails;
-    for (const line of eligible.filter((l) =>
-      basic.otherEmails.some((e) => l.text.toLowerCase().includes(e)),
-    ))
-      proofs.push(
-        evidence("profile.additionalEmails", line, ["VALIDATED_CONTACT"], 0.98),
-      );
-  }
-  if (phones.size) {
-    // Input schema expects original international strings, not machine confidence.
-    profile.additionalPhones = [...phones.values()].map((p) => p.originalText);
-    for (const line of contactLines.filter((l) =>
-      [...phones.values()].some((p) => l.text.includes(p.originalText)),
-    ))
-      proofs.push(
-        evidence("profile.additionalPhones", line, ["VALIDATED_CONTACT"], 0.94),
-      );
+  if (!meaningfulReviewText(profile.locationText as string | undefined) && locationComponents.size) {
+    profile.locationText = ["city", "region", "country"]
+      .flatMap(key => locationComponents.has(key) ? [locationComponents.get(key)!.value] : [])
+      .join(", ");
+    for (const component of locationComponents.values())
+      proofs.push(evidence("profile.locationText", component.line, ["EXPLICIT_LOCATION_COMPONENT"], 0.96));
   }
   return { basic, profile, evidence: proofs };
 }

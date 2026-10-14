@@ -43,7 +43,7 @@ describe.skipIf(!url)(
     const parsed = () =>
       extractStructuredResume(corpus[0].text, { asOf: new Date("2026-10-01") });
     const finalize = (id: string, token: string, result = parsed()) =>
-      finalizeResume(db(), id, token, result.basic, false, {
+      finalizeResume(db(), id, token, result.basic, {
         parserVersion: result.parserVersion,
         startedAt: new Date(),
         structured: result,
@@ -67,7 +67,7 @@ describe.skipIf(!url)(
         where: { resumeId: r.id },
         include: { evidence: true },
       });
-      expect(run.parserVersion).toBe("local-comprehensive-v1.1");
+      expect(run.parserVersion).toBe("local-comprehensive-v1.2");
       expect(run.method).toBe("LOCAL");
       expect(
         run.evidence.some((e) =>

@@ -58,7 +58,6 @@ export async function readCandidate(db: PrismaClient, resumeId: string) {
         select: {
           name: true,
           email: true,
-          otherEmails: true,
           phone: true,
           countryCode: true,
           normalizedPhone: true,
@@ -362,21 +361,6 @@ export async function patchCandidate(
           where: { resumeId },
           data: {
             ...values,
-            ...(values.additionalEmails
-              ? { additionalEmails: [...new Set(values.additionalEmails)] }
-              : {}),
-            ...(values.additionalPhones
-              ? {
-                  additionalPhones: [
-                    ...new Map(
-                      values.additionalPhones.map((p) => [
-                        p.normalizedPhone,
-                        p,
-                      ]),
-                    ).values(),
-                  ],
-                }
-              : {}),
             ...(dateOfBirth !== undefined
               ? {
                   dateOfBirth:

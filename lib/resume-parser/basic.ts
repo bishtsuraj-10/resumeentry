@@ -11,7 +11,6 @@ export interface ResumeExtraction {
   name: string | null;
   nameConfidence: number;
   email: string | null;
-  otherEmails: string[];
   emailConfidence: number;
   phone: string | null;
   countryCode: string | null;
@@ -80,7 +79,7 @@ const titleRegex = new RegExp(
   "i",
 );
 const roleNouns =
-  "developer|engineer|analyst|manager|accountant|nurse|teacher|designer|executive|pharmacist|paralegal|chef|scientist|coordinator|administrator|supervisor|assistant|consultant|architect|recruiter|specialist|planner|fellow|resident|representative|tutor|director|associate|partner|chef de partie";
+  "developer|engineer|analyst|manager|accountant|nurse|teacher|designer|executive|pharmacist|paralegal|chef|scientist|coordinator|administrator|supervisor|assistant|consultant|architect|recruiter|specialist|planner|fellow|resident|representative|tutor|director|associate|partner|intern|trainee|chef de partie";
 // Full standalone roles preserve seniority and specialties. Dictionary matching
 // remains a fallback for prose, not a prerequisite for recognizing a job header.
 export function jobTitle(line: string): string | null {
@@ -225,7 +224,6 @@ export function extractResumeFields(
     name,
     nameConfidence,
     email,
-    otherEmails: emails.slice(1),
     emailConfidence,
     phone: phone?.formatInternational() ?? null,
     countryCode: phone?.countryCallingCode

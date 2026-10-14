@@ -10,6 +10,7 @@ import path from "node:path";
 import os from "node:os";
 import { spawn } from "node:child_process";
 import { SignJWT } from "jose";
+import ExcelJS from "exceljs";
 
 const root = process.cwd();
 const base = new URL(process.env.DATABASE_URL);
@@ -24,6 +25,7 @@ const port = 3197;
 const origin = "http://localhost:" + port;
 const secret = randomUUID() + randomUUID();
 const checks = [];
+const reportPrefix = process.argv.includes("--m35") ? "M3.5" : "M3.3";
 let created = false, db, server, edge, socket;
 const pending = new Map();
 let sequence = 0;
@@ -69,13 +71,13 @@ async function main() {
     }
   } finally { await client.end(); }
   db = new PrismaClient({ adapter: new PrismaPg({ connectionString: testUrl.href }) });
-  await db.role.create({ data: { key: "M32_REVIEWER", name: "Synthetic review test", permissions: { create: ["resumes.view", "resumes.edit", "resumes.download"].map(permission => ({ permission })) } } });
+  await db.role.create({ data: { key: "M32_REVIEWER", name: "Synthetic review test", permissions: { create: ["resumes.view", "resumes.edit", "resumes.download", "resumes.export"].map(permission => ({ permission })) } } });
   await db.role.create({ data: { key: "M32_VIEWER", name: "Synthetic viewer test", permissions: { create: [{ permission: "resumes.view" }] } } });
   await db.user.create({ data: { id: "m33-reviewer", name: "Synthetic Reviewer", email: "reviewer@example.test", passwordHash: "unused", role: "M32_REVIEWER" } });
   await db.user.create({ data: { id: "m33-viewer", name: "Synthetic Viewer", email: "viewer@example.test", passwordHash: "unused", role: "M32_VIEWER" } });
   const filePath = path.join(storage, "synthetic.pdf");
   await fs.copyFile("tests/fixtures/m3/multi-page.pdf", filePath);
-  await db.resume.create({ data: { id: "m33-synthetic", fileName: "synthetic.pdf", filePath, fileType: "pdf", fileSize: BigInt((await fs.stat(filePath)).size), fileHash: "m33-synthetic", status: "REVIEW", extraction: { create: { name: "Synthetic Candidate", email: "candidate@example.test", phone: "+1 512 555 0101", designation: "Engineer", overallConfidence: .91, nameConfidence: .9, emailConfidence: .95, designationConfidence: .85 } }, candidate: { create: { firstName: "Synthetic", lastName: "Candidate", city: "Example City", summary: "Persisted professional summary", employment: { create: { position: 0, employer: "Synthetic Employer", designation: "Engineer", responsibilities: ["Persisted responsibility"], startYear: 2020, isCurrent: true } }, education: { create: { position: 0, degree: "BSc", institution: "Synthetic College", endYear: 2019 } }, projects: { create: { position: 0, name: "Synthetic Project", description: "Persisted project description" } }, certifications: { create: { position: 0, name: "Synthetic Certificate", issuer: "Synthetic Issuer" } }, links: { create: { type: "GITHUB", url: "https://example.test/code", label: "Code samples" } }, additional: { create: { position: 0, type: "LANGUAGE", title: "English", details: { proficiency: "Fluent" } } } } } } });
+  await db.resume.create({ data: { id: "m33-synthetic", fileName: "synthetic.pdf", filePath, fileType: "pdf", fileSize: BigInt((await fs.stat(filePath)).size), fileHash: "m33-synthetic", status: "REVIEW", extraction: { create: { name: "Synthetic Candidate", email: "candidate@example.test", phone: "+1 512 555 0101", designation: "Engineer", overallConfidence: .91, nameConfidence: .9, emailConfidence: .95, designationConfidence: .85 } }, candidate: { create: { locationText: "Example City", summary: "Persisted professional summary", employment: { create: { position: 0, employer: "Synthetic Employer", designation: "Engineer", responsibilities: ["Persisted responsibility"], startYear: 2020, isCurrent: true } }, education: { create: { position: 0, degree: "BSc", institution: "Synthetic College", endYear: 2019 } }, projects: { create: { position: 0, name: "Synthetic Project", description: "Persisted project description" } }, certifications: { create: { position: 0, name: "Synthetic Certificate", issuer: "Synthetic Issuer" } }, links: { create: { type: "GITHUB", url: "https://example.test/code", label: "Code samples" } }, additional: { create: { position: 0, type: "LANGUAGE", title: "English", details: { proficiency: "Fluent" } } } } } } });
   await db.resume.create({ data: { id: "m33-empty", fileName: "empty.docx", filePath: path.join(storage, "empty.docx"), fileType: "docx", fileSize: 1n, fileHash: "m33-empty", status: "REVIEW" } });
   server = child(process.execPath, ["node_modules/next/dist/bin/next", "start", "-H", "localhost", "-p", String(port)], { DATABASE_URL: testUrl.href, STORAGE_PATH: storage, AUTH_SECRET: secret, NODE_ENV: "production" });
   let serverLog = "";
@@ -106,6 +108,7 @@ async function main() {
   await waitFor("document.querySelector('h1')?.textContent==='Synthetic Candidate'");
   await waitFor("document.querySelector('.pdf-render-status')?.textContent==='Page 1 of 2'&&document.querySelector('canvas')?.height>300");
   await check("Live authenticated PDF renders from private storage", "fetch('/api/resumes/m33-synthetic/file').then(r=>r.ok&&r.headers.get('content-type')==='application/pdf')");
+  await check("Live Details uses only retained name/contact/location inputs", "fetch('/api/resumes/m33-synthetic').then(r=>r.json()).then(r=>!('otherEmails' in r.extraction)&&['firstName','lastName','additionalEmails','additionalPhones','city','region','country'].every(k=>!(k in r.candidate))&&document.querySelector('#overview').innerText.includes('Example City')&&[...document.querySelectorAll('#overview option')].some(o=>o.value==='locationText'))");
   await check("Live desktop uses light theme and only panel scrolling", "document.documentElement.dataset.theme==='light'&&getComputedStyle(document.querySelector('.workspace-scroll')).overflowY==='hidden'&&document.querySelector('.candidate-review').getBoundingClientRect().bottom<=1000");
   await check("Live PDF defaults to fitting its available width", "document.querySelector('[aria-label=\"PDF zoom\"]').value==='fit'&&document.querySelector('canvas').getBoundingClientRect().width<=document.querySelector('.pdf-scroll').clientWidth");
   await check("Live navigation groups all sections into six links", "document.querySelectorAll('.candidate-section-links a').length===6");
@@ -123,7 +126,7 @@ async function main() {
   const after = await db.resume.findUniqueOrThrow({ where: { id: "m33-synthetic" }, include: { extraction: true, candidate: true } });
   if (after.extraction.designation !== "Senior Engineer" || after.extraction.email !== "candidate@example.test" || after.candidate.revision !== 1 || after.candidate.summary !== "Persisted professional summary") throw Error("Live field patch did not preserve unrelated persisted fields");
   await check("Live partial verification marks only the submitted field", "!!document.querySelector('#overview [aria-label=\"Manually verified\"]')&&fetch('/api/resumes/m33-synthetic').then(r=>r.json()).then(r=>r.manualFields.length===1&&r.manualFields[0]==='basic.designation')");
-  await evaluate("document.querySelectorAll('#overview .candidate-editor')[1].open=true;(" + setValue + ")(document.querySelectorAll('#overview select')[1],'city')");
+  await evaluate("document.querySelectorAll('#overview .candidate-editor')[1].open=true;(" + setValue + ")(document.querySelectorAll('#overview select')[1],'locationText')");
   await evaluate("(" + setValue + ")(document.querySelectorAll('#overview textarea')[1],'Kept Draft City')");
   await waitFor("document.body.innerText.includes('1 unsaved correction')");
   await evaluate("document.querySelector('.candidate-identity .back-link').click()");
@@ -149,13 +152,24 @@ async function main() {
   await evaluate("document.querySelector('#employment .candidate-editor').open=true;(" + setValue + ")(document.querySelector('#employment textarea'),'Corrected Employer');document.querySelector('#employment form').requestSubmit()");
   await waitFor("document.querySelector('#employment').innerText.includes('Corrected Employer')");
   await check("Live record correction preserves its other fields and records exact verification", "fetch('/api/resumes/m33-synthetic').then(r=>r.json()).then(r=>r.candidate.employment[0].designation==='Engineer'&&r.candidate.employment[0].responsibilities[0]==='Persisted responsibility'&&r.manualFields.includes('employment.'+r.candidate.employment[0].id+'.employer')&&!r.manualFields.includes('employment.'+r.candidate.employment[0].id+'.designation'))");
+  const download = await evaluate("fetch('/api/export?status=COMPLETED').then(async r=>({status:r.status,bytes:Array.from(new Uint8Array(await r.arrayBuffer()))}))");
+  if (download.status !== 200) throw Error("Live Excel download failed.");
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(new Uint8Array(download.bytes).buffer);
+  const sheet = workbook.getWorksheet("Resumes");
+  const expectedHeaders = ["CV ID","File Name","Name","Email","Phone","Designation","Location","Headline","Summary","Total Experience (Months)","Employment History","Highest Qualification","Education","Skills","Projects","Certifications","Links","Additional Information","Status","Overall Confidence","Created At"];
+  if (workbook.worksheets.length !== 1 || !sheet || sheet.columnCount !== 21 || sheet.rowCount !== 2 || JSON.stringify(sheet.getRow(1).values.slice(1)) !== JSON.stringify(expectedHeaders) || sheet.getRow(2).getCell(1).value !== "m33-synthetic")
+    throw Error("Live Excel structure or Resume ID cardinality changed.");
+  for (const column of [11,13,15,16,17,18]) if (!sheet.getRow(2).getCell(column).value) throw Error("Live Excel lost a retained related section.");
+  checks.push("Live Excel download has exactly 21 ordered columns, one Resumes sheet, and one row with retained related data");
+  console.log("PASS " + checks.at(-1));
   await evaluate("document.querySelector('a[href=\"#overview\"]').click();document.querySelectorAll('#overview .candidate-editor').forEach(d=>d.open=false);document.querySelector('#employment .candidate-editor').open=false");
   await call("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   await check("Live mobile layout stacks panels and has no page overflow", "getComputedStyle(document.querySelector('.candidate-workspace')).gridTemplateColumns.split(' ').length===1&&document.documentElement.scrollWidth<=390");
   await check("Live mobile panels do not overlap", "document.querySelector('.candidate-document').getBoundingClientRect().top>=document.querySelector('.candidate-information').getBoundingClientRect().bottom");
-  await fs.writeFile(path.join(root, "docs/evaluation/M3.3-mobile.png"), Buffer.from((await call("Page.captureScreenshot", { format: "png" })).data, "base64"));
+  await fs.writeFile(path.join(root, `docs/evaluation/${reportPrefix}-mobile.png`), Buffer.from((await call("Page.captureScreenshot", { format: "png" })).data, "base64"));
   await call("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
-  await fs.writeFile(path.join(root, "docs/evaluation/M3.3-desktop.png"), Buffer.from((await call("Page.captureScreenshot", { format: "png" })).data, "base64"));
+  await fs.writeFile(path.join(root, `docs/evaluation/${reportPrefix}-desktop.png`), Buffer.from((await call("Page.captureScreenshot", { format: "png" })).data, "base64"));
   await login("m33-viewer");
   await call("Page.navigate", { url: origin + "/resumes/m33-synthetic" });
   await waitFor("document.querySelector('h1')?.textContent==='Synthetic Candidate'");
@@ -164,7 +178,7 @@ async function main() {
   await call("Page.navigate", { url: origin + "/resumes/m33-empty" });
   await waitFor("document.querySelector('#employment')?.innerText.includes('No information was extracted')");
   await check("Live legacy and empty optional sections remain reviewable", "document.body.innerText.includes('No structured candidate profile')&&!![...document.querySelectorAll('button')].find(b=>b.textContent==='Complete review')&&document.body.innerText.includes('Preview is available for PDF files')");
-  await fs.writeFile("docs/evaluation/M3.3-live-browser.json", JSON.stringify({ browser: "Microsoft Edge headless", mode: "Production Next server, real auth/permissions, disposable PostgreSQL database, private PDF storage", checks, passed: checks.length, failed: 0 }, null, 2) + "\n");
+  await fs.writeFile(`docs/evaluation/${reportPrefix}-live-browser.json`, JSON.stringify({ browser: "Microsoft Edge headless", mode: "Production Next server, real auth/permissions, disposable PostgreSQL database, private PDF storage", checks, passed: checks.length, failed: 0 }, null, 2) + "\n");
   console.log("PASS " + checks.length + " live browser checks");
 }
 try { await main(); }

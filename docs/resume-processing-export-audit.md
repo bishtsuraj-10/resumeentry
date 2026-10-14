@@ -1,4 +1,8 @@
+> M3.5 update: this audit records the earlier schema and export. The current export has 21 columns; the eight approved split-name, secondary-contact and geographic-component columns were retired. See `resume-excel-export.md` and `M3.5-candidate-cleanup.md` for the current contract and recovery procedure. Historical findings below are retained.
+
 # Resume processing and Excel export audit
+
+> Historical audit: its 50-column, multi-sheet export description has been superseded by the approved [single-sheet, 24-column format](resume-excel-export.md). The architecture findings and read-only completeness statistics below remain the original audit record; use the linked document for current export mappings and validation.
 
 Audit date: 14 October 2026. This report describes the current working tree, including the owner's pre-existing uncommitted M3/review changes. Only the export implementation, focused export tests and this report were changed for this request. No commit, push, resume reprocessing, AI call, migration or candidate-data mutation was performed.
 

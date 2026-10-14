@@ -12,7 +12,7 @@ import { extractLinks } from "./extractors/profile-links";
 import { experienceMonths } from "./validators/dates";
 import { evidence, type MachineEvidence } from "./field-confidence";
 import type { ResumeExtraction } from "./basic";
-export const PARSER_VERSION = "local-comprehensive-v1.1";
+export const PARSER_VERSION = "local-comprehensive-v1.2";
 export interface StructuredExtraction {
   basic: ResumeExtraction;
   candidate: Omit<CandidatePatch, "expectedRevision">;

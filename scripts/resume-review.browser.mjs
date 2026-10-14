@@ -25,20 +25,20 @@ const common = { confidence: 0.86, verifiedAt: null };
 const candidate = {
   resumeId: "synthetic",
   revision: 4,
-  firstName: truth.firstName,
-  lastName: truth.lastName,
+
+
   headline: truth.headline,
   summary: truth.summary,
   objective: null,
-  city: truth.location.city,
-  region: truth.location.region,
-  country: truth.location.country,
+
+
+
   locationText: truth.location.text,
   totalExperienceMonths: 135,
   noticePeriod: null,
   employmentPreferences: [],
-  additionalEmails: [],
-  additionalPhones: [],
+
+
   dateOfBirth: null,
   verifiedAt: null,
   skills: truth.skills
@@ -125,7 +125,7 @@ window.addEventListener('error',e=>window.__errors.push(e.message));window.addEv
 window.fetch=async(url,options={})=>{window.__calls.push({url:String(url),method:options.method||'GET',body:options.body?JSON.parse(options.body):null});if(window.__mode==='slow'){await new Promise((resolve,reject)=>{const timer=setTimeout(resolve,300);options.signal?.addEventListener('abort',()=>{clearTimeout(timer);window.__aborts++;reject(new DOMException('Aborted','AbortError'));},{once:true});});}if(options.signal?.aborted)throw new DOMException('Aborted','AbortError');
 if(options.method==='PATCH'){if(window.__mode==='conflict')return Response.json({error:'Candidate changed; reload before editing.'},{status:409});const p=JSON.parse(options.body);if(p.basic)Object.assign(window.__record.extraction,p.basic);if(p.profile)Object.assign(window.__record.candidate,p.profile);window.__record.candidate.revision++;return Response.json({revision:window.__record.candidate.revision});}
 if(String(url).includes('provenance'))return Response.json({runs:[],page:1});if(window.__mode==='403')return Response.json({error:'Forbidden'},{status:403});if(window.__mode==='empty')return Response.json(null);
-if(String(url).startsWith('/api/resumes?'))return Response.json({items:[{...window.__record,createdAt:'2026-10-13T00:00:00Z',overview:{name:window.__record.extraction.name,designation:window.__record.extraction.designation,location:window.__record.candidate.locationText,totalExperienceMonths:135,skills:window.__record.candidate.skills.map(s=>s.skill.canonicalName),education:'Bachelor of Science · Computer Science'}}],total:51,pages:3});return Response.json(window.__record);};
+window.__initialLocation ??= window.__record.candidate?.locationText; if(String(url).startsWith('/api/resumes?'))return Response.json({items:[{...window.__record,createdAt:'2026-10-13T00:00:00Z',overview:{name:window.__record.extraction.name,designation:window.__record.extraction.designation,location:window.__record.candidate.locationText,totalExperienceMonths:135,skills:window.__record.candidate.skills.map(s=>s.skill.canonicalName),education:'Bachelor of Science · Computer Science'}}],total:51,pages:3});return Response.json(window.__record);};
 const app=createRoot(document.getElementById('root'));window.__mount=(mode='detail',id='synthetic',key='default')=>app.render(mode==='list'?<ResumeList key={key} title='All resumes'/>:<ResumeDetail key={key} id={id}/>);window.__mount(location.pathname==='/resumes'?'list':'detail');`;
 let edge, server, socket;
 let sequence = 0;
@@ -282,7 +282,7 @@ async function main() {
   await evaluate(
     "window.__mode='conflict';document.querySelectorAll('#overview .candidate-editor')[1].open=true;(" +
       setValue +
-      ")(document.querySelectorAll('#overview select')[1],'city');",
+      ")(document.querySelectorAll('#overview select')[1],'locationText');",
   );
   await evaluate(
     "(" +
@@ -294,7 +294,7 @@ async function main() {
   );
   await check(
     "Conflicting revision keeps the unsaved field and explains recovery",
-    "document.querySelectorAll('#overview textarea')[1].value==='Synthetic City'&&window.__record.candidate.city==='Austin'",
+    "document.querySelectorAll('#overview textarea')[1].value==='Synthetic City'&&window.__record.candidate.locationText===window.__initialLocation",
   );
   await evaluate(
     "window.__mode='403';window.__mount('detail','forbidden','forbidden')",

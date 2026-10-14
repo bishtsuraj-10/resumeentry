@@ -2,23 +2,16 @@ import { extractStructuredResume, type StructuredExtraction } from "./index";
 export const evaluationFields = [
   "basic.name",
   "basic.email",
-  "basic.otherEmails",
   "basic.normalizedPhone",
   "basic.designation",
-  "profile.firstName",
-  "profile.lastName",
   "profile.headline",
   "profile.summary",
   "profile.objective",
   "profile.locationText",
-  "profile.city",
-  "profile.region",
-  "profile.country",
   "profile.dateOfBirth",
   "profile.noticePeriod",
   "profile.employmentPreferences",
   "profile.totalExperienceMonths",
-  "profile.additionalPhones",
   "skills",
   "employment.employer",
   "employment.designation",
@@ -31,9 +24,11 @@ export const evaluationFields = [
   "education.grade",
   "education.gradeScale",
   "projects.name",
+  "projects.url",
   "projects.role",
   "projects.skills",
   "certifications.name",
+  "certifications.url",
   "certifications.issuer",
   "certifications.issueDate",
   "links.url",
@@ -59,10 +54,6 @@ export function actualField(
 ): unknown {
   if (path.startsWith("basic."))
     return result.basic[path.slice(6) as keyof typeof result.basic];
-  if (path === "profile.additionalPhones")
-    return result.candidate.profile?.additionalPhones?.map(
-      (p) => p.normalizedPhone,
-    );
   if (path.startsWith("profile."))
     return result.candidate.profile?.[
       path.slice(8) as keyof NonNullable<typeof result.candidate.profile>
