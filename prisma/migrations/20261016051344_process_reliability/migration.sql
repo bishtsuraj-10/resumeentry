@@ -1,4 +1,7 @@
 -- CreateEnum
+CREATE TYPE "ResumeStatus" AS ENUM ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'REVIEW', 'DUPLICATE', 'CANCELLED');
+
+-- CreateEnum
 CREATE TYPE "ExtractionMethod" AS ENUM ('LOCAL', 'HYBRID', 'HUMAN', 'IMPORT');
 
 -- CreateEnum
@@ -8,16 +11,162 @@ CREATE TYPE "CandidateLinkType" AS ENUM ('LINKEDIN', 'GITHUB', 'PORTFOLIO', 'WEB
 CREATE TYPE "CandidateAdditionalType" AS ENUM ('LANGUAGE', 'AWARD', 'PUBLICATION', 'VOLUNTEERING', 'INTERNSHIP', 'QUALIFICATION');
 
 -- CreateTable
+CREATE TABLE "User" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "passwordHash" TEXT NOT NULL,
+    "role" TEXT NOT NULL,
+    "sessionVersion" INTEGER NOT NULL DEFAULT 0,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "User_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Role" (
+    "key" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "isSystem" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Role_pkey" PRIMARY KEY ("key")
+);
+
+-- CreateTable
+CREATE TABLE "RolePermission" (
+    "roleKey" TEXT NOT NULL,
+    "permission" TEXT NOT NULL,
+
+    CONSTRAINT "RolePermission_pkey" PRIMARY KEY ("roleKey","permission")
+);
+
+-- CreateTable
+CREATE TABLE "UserPermissionGrant" (
+    "userId" TEXT NOT NULL,
+    "permission" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "UserPermissionGrant_pkey" PRIMARY KEY ("userId","permission")
+);
+
+-- CreateTable
+CREATE TABLE "Resume" (
+    "id" TEXT NOT NULL,
+    "fileName" TEXT NOT NULL,
+    "filePath" TEXT NOT NULL,
+    "fileType" TEXT NOT NULL,
+    "fileSize" BIGINT NOT NULL,
+    "fileHash" TEXT NOT NULL,
+    "status" "ResumeStatus" NOT NULL DEFAULT 'PENDING',
+    "claimToken" TEXT,
+    "leaseUntil" TIMESTAMP(3),
+    "processingGeneration" INTEGER NOT NULL DEFAULT 0,
+    "processingAttempts" INTEGER NOT NULL DEFAULT 0,
+    "scheduleAfter" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "processedAt" TIMESTAMP(3),
+    "batchId" TEXT,
+    "duplicateOf" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Resume_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ResumeExtraction" (
+    "id" TEXT NOT NULL,
+    "resumeId" TEXT NOT NULL,
+    "name" TEXT,
+    "nameConfidence" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "email" TEXT,
+    "emailConfidence" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "phone" TEXT,
+    "countryCode" TEXT,
+    "normalizedPhone" TEXT,
+    "phoneConfidence" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "designation" TEXT,
+    "designationConfidence" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "overallConfidence" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "requiresReview" BOOLEAN NOT NULL DEFAULT true,
+    "reviewedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "ResumeExtraction_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ProcessingBatch" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'QUEUED',
+    "totalFiles" INTEGER NOT NULL DEFAULT 0,
+    "processedFiles" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "ProcessingBatch_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ProcessingJob" (
+    "id" TEXT NOT NULL,
+    "batchId" TEXT,
+    "queueJobId" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'QUEUED',
+    "total" INTEGER NOT NULL DEFAULT 0,
+    "completed" INTEGER NOT NULL DEFAULT 0,
+    "failed" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "ProcessingJob_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Duplicate" (
+    "id" TEXT NOT NULL,
+    "resumeId" TEXT NOT NULL,
+    "originalResumeId" TEXT NOT NULL,
+    "matchType" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Duplicate_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ExtractionError" (
+    "id" TEXT NOT NULL,
+    "resumeId" TEXT NOT NULL,
+    "errorType" TEXT NOT NULL,
+    "errorMessage" TEXT NOT NULL,
+    "retryCount" INTEGER NOT NULL DEFAULT 0,
+    "lastAttemptAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ExtractionError_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "AuditLog" (
+    "id" TEXT NOT NULL,
+    "actor" TEXT NOT NULL,
+    "action" TEXT NOT NULL,
+    "targetId" TEXT,
+    "metadata" JSONB,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "AuditLog_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "CandidateProfile" (
     "resumeId" TEXT NOT NULL,
     "revision" INTEGER NOT NULL DEFAULT 0,
-    "firstName" TEXT,
-    "lastName" TEXT,
-    "additionalEmails" TEXT[] DEFAULT ARRAY[]::TEXT[],
-    "additionalPhones" JSONB NOT NULL DEFAULT '[]',
-    "city" TEXT,
-    "region" TEXT,
-    "country" TEXT,
     "locationText" TEXT,
     "dateOfBirth" DATE,
     "headline" TEXT,
@@ -228,7 +377,70 @@ CREATE TABLE "CandidateEvidence" (
 );
 
 -- CreateIndex
-CREATE INDEX "CandidateProfile_city_country_idx" ON "CandidateProfile"("city", "country");
+CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
+
+-- CreateIndex
+CREATE INDEX "User_role_isActive_idx" ON "User"("role", "isActive");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Role_name_key" ON "Role"("name");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Resume_filePath_key" ON "Resume"("filePath");
+
+-- CreateIndex
+CREATE INDEX "Resume_status_createdAt_idx" ON "Resume"("status", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "Resume_status_scheduleAfter_idx" ON "Resume"("status", "scheduleAfter");
+
+-- CreateIndex
+CREATE INDEX "Resume_status_leaseUntil_idx" ON "Resume"("status", "leaseUntil");
+
+-- CreateIndex
+CREATE INDEX "Resume_batchId_status_idx" ON "Resume"("batchId", "status");
+
+-- CreateIndex
+CREATE INDEX "Resume_fileHash_idx" ON "Resume"("fileHash");
+
+-- CreateIndex
+CREATE INDEX "Resume_processedAt_idx" ON "Resume"("processedAt");
+
+-- CreateIndex
+CREATE INDEX "Resume_fileName_idx" ON "Resume"("fileName");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ResumeExtraction_resumeId_key" ON "ResumeExtraction"("resumeId");
+
+-- CreateIndex
+CREATE INDEX "ResumeExtraction_email_idx" ON "ResumeExtraction"("email");
+
+-- CreateIndex
+CREATE INDEX "ResumeExtraction_normalizedPhone_idx" ON "ResumeExtraction"("normalizedPhone");
+
+-- CreateIndex
+CREATE INDEX "ResumeExtraction_requiresReview_overallConfidence_idx" ON "ResumeExtraction"("requiresReview", "overallConfidence");
+
+-- CreateIndex
+CREATE INDEX "ProcessingBatch_status_createdAt_idx" ON "ProcessingBatch"("status", "createdAt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ProcessingJob_queueJobId_key" ON "ProcessingJob"("queueJobId");
+
+-- CreateIndex
+CREATE INDEX "Duplicate_matchType_idx" ON "Duplicate"("matchType");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Duplicate_resumeId_originalResumeId_key" ON "Duplicate"("resumeId", "originalResumeId");
+
+-- CreateIndex
+CREATE INDEX "ExtractionError_resumeId_createdAt_idx" ON "ExtractionError"("resumeId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "AuditLog_createdAt_idx" ON "AuditLog"("createdAt");
+
+-- CreateIndex
+CREATE INDEX "AuditLog_action_createdAt_idx" ON "AuditLog"("action", "createdAt");
 
 -- CreateIndex
 CREATE INDEX "CandidateProfile_totalExperienceMonths_idx" ON "CandidateProfile"("totalExperienceMonths");
@@ -282,6 +494,30 @@ CREATE INDEX "ExtractionRun_resumeId_startedAt_idx" ON "ExtractionRun"("resumeId
 CREATE INDEX "CandidateEvidence_runId_fieldPath_idx" ON "CandidateEvidence"("runId", "fieldPath");
 
 -- AddForeignKey
+ALTER TABLE "User" ADD CONSTRAINT "User_role_fkey" FOREIGN KEY ("role") REFERENCES "Role"("key") ON DELETE RESTRICT ON UPDATE RESTRICT;
+
+-- AddForeignKey
+ALTER TABLE "RolePermission" ADD CONSTRAINT "RolePermission_roleKey_fkey" FOREIGN KEY ("roleKey") REFERENCES "Role"("key") ON DELETE CASCADE ON UPDATE RESTRICT;
+
+-- AddForeignKey
+ALTER TABLE "UserPermissionGrant" ADD CONSTRAINT "UserPermissionGrant_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Resume" ADD CONSTRAINT "Resume_batchId_fkey" FOREIGN KEY ("batchId") REFERENCES "ProcessingBatch"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ResumeExtraction" ADD CONSTRAINT "ResumeExtraction_resumeId_fkey" FOREIGN KEY ("resumeId") REFERENCES "Resume"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ProcessingJob" ADD CONSTRAINT "ProcessingJob_batchId_fkey" FOREIGN KEY ("batchId") REFERENCES "ProcessingBatch"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Duplicate" ADD CONSTRAINT "Duplicate_originalResumeId_fkey" FOREIGN KEY ("originalResumeId") REFERENCES "Resume"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ExtractionError" ADD CONSTRAINT "ExtractionError_resumeId_fkey" FOREIGN KEY ("resumeId") REFERENCES "Resume"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "CandidateProfile" ADD CONSTRAINT "CandidateProfile_resumeId_fkey" FOREIGN KEY ("resumeId") REFERENCES "Resume"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -325,23 +561,3 @@ ALTER TABLE "CandidateEvidence" ADD CONSTRAINT "CandidateEvidence_runId_fkey" FO
 
 -- AddForeignKey
 ALTER TABLE "CandidateEvidence" ADD CONSTRAINT "CandidateEvidence_auditLogId_fkey" FOREIGN KEY ("auditLogId") REFERENCES "AuditLog"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- Additional integrity checks for future trusted extraction writers.
-ALTER TABLE "ResumeSkill" ADD CONSTRAINT "ResumeSkill_confidence_range" CHECK ("confidence" IS NULL OR ("confidence" >= 0 AND "confidence" <= 1));
-ALTER TABLE "CandidateEmployment" ADD CONSTRAINT "CandidateEmployment_confidence_range" CHECK ("confidence" IS NULL OR ("confidence" >= 0 AND "confidence" <= 1));
-ALTER TABLE "CandidateEducation" ADD CONSTRAINT "CandidateEducation_confidence_range" CHECK ("confidence" IS NULL OR ("confidence" >= 0 AND "confidence" <= 1));
-ALTER TABLE "CandidateProject" ADD CONSTRAINT "CandidateProject_confidence_range" CHECK ("confidence" IS NULL OR ("confidence" >= 0 AND "confidence" <= 1));
-ALTER TABLE "CandidateCertification" ADD CONSTRAINT "CandidateCertification_confidence_range" CHECK ("confidence" IS NULL OR ("confidence" >= 0 AND "confidence" <= 1));
-ALTER TABLE "CandidateAdditional" ADD CONSTRAINT "CandidateAdditional_confidence_range" CHECK ("confidence" IS NULL OR ("confidence" >= 0 AND "confidence" <= 1));
-ALTER TABLE "CandidateEvidence" ADD CONSTRAINT "CandidateEvidence_confidence_range" CHECK ("confidence" IS NULL OR ("confidence" >= 0 AND "confidence" <= 1));
-ALTER TABLE "CandidateEmployment" ADD CONSTRAINT "CandidateEmployment_start_partial_date" CHECK (("startYear" IS NULL AND "startMonth" IS NULL AND "startDay" IS NULL) OR ("startYear" IS NOT NULL AND "startYear" BETWEEN 1900 AND 2200 AND ("startMonth" IS NULL AND "startDay" IS NULL OR "startMonth" IS NOT NULL AND "startMonth" BETWEEN 1 AND 12 AND ("startDay" IS NULL OR "startDay" BETWEEN 1 AND EXTRACT(DAY FROM (make_date("startYear", "startMonth", 1) + INTERVAL '1 month' - INTERVAL '1 day'))))));
-ALTER TABLE "CandidateEmployment" ADD CONSTRAINT "CandidateEmployment_end_partial_date" CHECK (("endYear" IS NULL AND "endMonth" IS NULL AND "endDay" IS NULL) OR ("endYear" IS NOT NULL AND "endYear" BETWEEN 1900 AND 2200 AND ("endMonth" IS NULL AND "endDay" IS NULL OR "endMonth" IS NOT NULL AND "endMonth" BETWEEN 1 AND 12 AND ("endDay" IS NULL OR "endDay" BETWEEN 1 AND EXTRACT(DAY FROM (make_date("endYear", "endMonth", 1) + INTERVAL '1 month' - INTERVAL '1 day'))))));
-ALTER TABLE "CandidateEducation" ADD CONSTRAINT "CandidateEducation_start_partial_date" CHECK (("startYear" IS NULL AND "startMonth" IS NULL AND "startDay" IS NULL) OR ("startYear" IS NOT NULL AND "startYear" BETWEEN 1900 AND 2200 AND ("startMonth" IS NULL AND "startDay" IS NULL OR "startMonth" IS NOT NULL AND "startMonth" BETWEEN 1 AND 12 AND ("startDay" IS NULL OR "startDay" BETWEEN 1 AND EXTRACT(DAY FROM (make_date("startYear", "startMonth", 1) + INTERVAL '1 month' - INTERVAL '1 day'))))));
-ALTER TABLE "CandidateEducation" ADD CONSTRAINT "CandidateEducation_end_partial_date" CHECK (("endYear" IS NULL AND "endMonth" IS NULL AND "endDay" IS NULL) OR ("endYear" IS NOT NULL AND "endYear" BETWEEN 1900 AND 2200 AND ("endMonth" IS NULL AND "endDay" IS NULL OR "endMonth" IS NOT NULL AND "endMonth" BETWEEN 1 AND 12 AND ("endDay" IS NULL OR "endDay" BETWEEN 1 AND EXTRACT(DAY FROM (make_date("endYear", "endMonth", 1) + INTERVAL '1 month' - INTERVAL '1 day'))))));
-ALTER TABLE "CandidateProject" ADD CONSTRAINT "CandidateProject_start_partial_date" CHECK (("startYear" IS NULL AND "startMonth" IS NULL AND "startDay" IS NULL) OR ("startYear" IS NOT NULL AND "startYear" BETWEEN 1900 AND 2200 AND ("startMonth" IS NULL AND "startDay" IS NULL OR "startMonth" IS NOT NULL AND "startMonth" BETWEEN 1 AND 12 AND ("startDay" IS NULL OR "startDay" BETWEEN 1 AND EXTRACT(DAY FROM (make_date("startYear", "startMonth", 1) + INTERVAL '1 month' - INTERVAL '1 day'))))));
-ALTER TABLE "CandidateProject" ADD CONSTRAINT "CandidateProject_end_partial_date" CHECK (("endYear" IS NULL AND "endMonth" IS NULL AND "endDay" IS NULL) OR ("endYear" IS NOT NULL AND "endYear" BETWEEN 1900 AND 2200 AND ("endMonth" IS NULL AND "endDay" IS NULL OR "endMonth" IS NOT NULL AND "endMonth" BETWEEN 1 AND 12 AND ("endDay" IS NULL OR "endDay" BETWEEN 1 AND EXTRACT(DAY FROM (make_date("endYear", "endMonth", 1) + INTERVAL '1 month' - INTERVAL '1 day'))))));
-ALTER TABLE "CandidateCertification" ADD CONSTRAINT "CandidateCertification_issue_partial_date" CHECK (("issueYear" IS NULL AND "issueMonth" IS NULL AND "issueDay" IS NULL) OR ("issueYear" IS NOT NULL AND "issueYear" BETWEEN 1900 AND 2200 AND ("issueMonth" IS NULL AND "issueDay" IS NULL OR "issueMonth" IS NOT NULL AND "issueMonth" BETWEEN 1 AND 12 AND ("issueDay" IS NULL OR "issueDay" BETWEEN 1 AND EXTRACT(DAY FROM (make_date("issueYear", "issueMonth", 1) + INTERVAL '1 month' - INTERVAL '1 day'))))));
-ALTER TABLE "CandidateCertification" ADD CONSTRAINT "CandidateCertification_expiry_partial_date" CHECK (("expiryYear" IS NULL AND "expiryMonth" IS NULL AND "expiryDay" IS NULL) OR ("expiryYear" IS NOT NULL AND "expiryYear" BETWEEN 1900 AND 2200 AND ("expiryMonth" IS NULL AND "expiryDay" IS NULL OR "expiryMonth" IS NOT NULL AND "expiryMonth" BETWEEN 1 AND 12 AND ("expiryDay" IS NULL OR "expiryDay" BETWEEN 1 AND EXTRACT(DAY FROM (make_date("expiryYear", "expiryMonth", 1) + INTERVAL '1 month' - INTERVAL '1 day'))))));
-ALTER TABLE "CandidateProfile" ADD CONSTRAINT "CandidateProfile_experience_range" CHECK ("totalExperienceMonths" IS NULL OR "totalExperienceMonths" BETWEEN 0 AND 1200);
-ALTER TABLE "CandidateEmployment" ADD CONSTRAINT "CandidateEmployment_current_end" CHECK ("isCurrent" IS DISTINCT FROM true OR ("endYear" IS NULL AND "endText" IS NULL));
-ALTER TABLE "ExtractionRun" ADD CONSTRAINT "ExtractionRun_timestamp_order" CHECK ("completedAt" IS NULL OR "completedAt" >= "startedAt");

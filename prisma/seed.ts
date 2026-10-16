@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { db } from "../lib/db";
+import { PERMISSIONS } from "../lib/permissions";
 
 async function main() {
   const adminEmail = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
@@ -10,6 +11,27 @@ async function main() {
       "Set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD_HASH before seeding.",
     );
   }
+
+  const adminRole = await db.role.upsert({
+    where: { key: "ADMIN" },
+    create: {
+      key: "ADMIN",
+      name: "System Administrator",
+      isSystem: true,
+    },
+    update: {
+      name: "System Administrator",
+      isSystem: true,
+    },
+  });
+
+  await db.rolePermission.createMany({
+    data: PERMISSIONS.map((permission) => ({
+      roleKey: adminRole.key,
+      permission,
+    })),
+    skipDuplicates: true,
+  });
 
   const admin = await db.user.upsert({
     where: {

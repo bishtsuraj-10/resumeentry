@@ -4,6 +4,7 @@ import { requireApiSession, session } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   appendStoredResume,
+  createResumeLongTextWorksheet,
   createResumeWorksheet,
   resumeExportInclude,
 } from "@/lib/excel-export";
@@ -48,6 +49,7 @@ export async function GET(request: Request) {
     useSharedStrings: false,
   });
   const sheet = createResumeWorksheet(workbook);
+  const longTextSheet = createResumeLongTextWorksheet(workbook);
   void (async () => {
     try {
       let cursor: string | undefined;
@@ -61,12 +63,13 @@ export async function GET(request: Request) {
         });
         if (!rows.length) break;
         for (const row of rows) {
-          appendStoredResume(sheet, row);
+          appendStoredResume(sheet, row, longTextSheet);
         }
         cursor = rows[rows.length - 1].id;
         if (rows.length < 500) break;
       }
       await sheet.commit();
+      await longTextSheet.commit();
       await workbook.commit();
       await db.auditLog.create({
         data: {

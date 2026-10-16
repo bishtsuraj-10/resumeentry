@@ -48,6 +48,7 @@ export const resumeExportColumns = [
   { header: "Overall Confidence", key: "overallConfidence", width: 20 },
   { header: "Created At", key: "createdAt", width: 26 },
 ] as const;
+const maxExcelCellLength = 32767;
 
 function compareText(a: string, b: string) {
   return a < b ? -1 : a > b ? 1 : 0;
@@ -158,6 +159,25 @@ export function createResumeWorksheet(workbook: ExcelJS.stream.xlsx.WorkbookWrit
   return sheet;
 }
 
+export function createResumeLongTextWorksheet(workbook: ExcelJS.stream.xlsx.WorkbookWriter) {
+  const sheet = workbook.addWorksheet("Long Text", {
+    views: [{ state: "frozen", xSplit: 4, ySplit: 1 }],
+  });
+  sheet.columns = [
+    { header: "CV ID", key: "id", width: 24 },
+    { header: "File Name", key: "fileName", width: 32 },
+    { header: "Field", key: "field", width: 28 },
+    { header: "Part", key: "part", width: 10 },
+    { header: "Text", key: "text", width: 80, style: { alignment: { vertical: "top", wrapText: true } } },
+  ];
+  sheet.autoFilter = "A1:E1";
+  sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+  sheet.getRow(1).fill = {
+    type: "pattern", pattern: "solid", fgColor: { argb: "FF6652CF" },
+  };
+  return sheet;
+}
+
 export function appendResumeExportRow(sheet: Pick<ExcelJS.Worksheet, "addRow">, row: ResumeExportRow) {
   // Exactly one approved cell per column. Never serialize formula/hyperlink objects.
   const values = resumeExportColumns.map(({ header, key }) => {
@@ -170,6 +190,37 @@ export function appendResumeExportRow(sheet: Pick<ExcelJS.Worksheet, "addRow">, 
   sheet.addRow(values).commit();
 }
 
-export function appendStoredResume(sheet: Pick<ExcelJS.Worksheet, "addRow">, row: StoredExportResume) {
-  appendResumeExportRow(sheet, mapStoredResume(row));
+function splitExcelCell(value: string) {
+  const chunks: string[] = [];
+  let start = 0;
+  while (start < value.length) {
+    let end = Math.min(start + maxExcelCellLength, value.length);
+    const lastCodeUnit = value.charCodeAt(end - 1);
+    if (end < value.length && lastCodeUnit >= 0xd800 && lastCodeUnit <= 0xdbff)
+      end--;
+    chunks.push(value.slice(start, end));
+    start = end;
+  }
+  return chunks;
+}
+
+export function appendStoredResume(
+  sheet: Pick<ExcelJS.Worksheet, "addRow">,
+  row: StoredExportResume,
+  longTextSheet?: Pick<ExcelJS.Worksheet, "addRow">,
+) {
+  const exported = mapStoredResume(row);
+  const exportValues: Record<string, string | number | null | undefined> = exported;
+  for (const column of resumeExportColumns) {
+    const value = exportValues[column.key];
+    if (typeof value !== "string" || value.length <= maxExcelCellLength) continue;
+    if (!longTextSheet) continue;
+
+    const chunks = splitExcelCell(value);
+    for (const [index, chunk] of chunks.entries()) {
+      longTextSheet.addRow([row.id, row.fileName, column.header, index + 1, chunk]).commit();
+    }
+    exportValues[column.key] = `See the Long Text sheet (${chunks.length} parts).`;
+  }
+  appendResumeExportRow(sheet, exported);
 }
