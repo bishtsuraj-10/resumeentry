@@ -5,7 +5,7 @@ import { extractResumeFields } from "../basic";
 import { extractSkills } from "./skills";
 import { safeUrlSchema } from "../../candidate-validation";
 type Entry = Record<string, unknown>;
-const bullet = /^[-•*]\s*/;
+const bullet = /^[-•*]\s*/;
 const strip = (s: string) => s.replace(bullet, "").trim();
 function labeled(lines: SectionLine[], pattern: string): string | undefined {
   for (const line of lines) {
@@ -27,7 +27,14 @@ function datedBlocks(lines: SectionLine[]): SectionLine[][] {
   for (let i = 0; i < lines.length; i++) {
     if (!dateRange(lines[i].text)) continue;
     let start = i;
+    const range = dateRange(lines[i].text)!;
+    // Date-led rows often contain location/type cells; they still belong to
+    // the preceding title/employer header. Only a row carrying identity cells
+    // before its dates is self-contained.
+    const selfContained = /\|/.test(lines[i].text) &&
+      lines[i].text.slice(0, lines[i].text.indexOf(range.matched)).replace(bullet, "").trim().length > 0;
     if (
+      !selfContained &&
       i > 0 &&
       !dateRange(lines[i - 1].text) &&
       !bullet.test(lines[i - 1].text) &&
@@ -37,15 +44,33 @@ function datedBlocks(lines: SectionLine[]): SectionLine[][] {
       start = i - 1;
     if (
       start === i &&
+      !selfContained &&
       i > 1 &&
       !bullet.test(lines[i - 1].text) &&
       !dateRange(lines[i - 1].text) &&
+      !dateRange(lines[i - 2].text) &&
       /[|]|\bat\b/i.test(lines[i - 2].text) &&
       !bullet.test(lines[i - 2].text)
     )
       start = i - 2;
     // Employer on one line, title on the next, followed by dates.
-    if (start > 0 && /^(employer|company):/i.test(lines[start - 1].text))
+    if (
+      !selfContained &&
+      start > 0 &&
+      /^(employer|company):/i.test(lines[start - 1].text)
+    )
+      start--;
+    else if (
+      !selfContained &&
+      start > 0 &&
+      !dateRange(lines[start - 1].text) &&
+      lines[start - 1].text.length <= 160 &&
+      !/^[\d•*-]/.test(lines[start - 1].text) &&
+      /\b(?:limited|ltd|llc|inc|corporation|contracting|construction)\b/i.test(
+        lines[start - 1].text,
+      ) &&
+      !extractResumeFields(lines[start - 1].text).designation
+    )
       start--;
     starts.add(start);
   }
@@ -59,12 +84,14 @@ function namedBlocks(lines: SectionLine[], section: Section): SectionLine[][] {
   for (const [index, line] of lines.entries()) {
     const continuation =
       bullet.test(line.text) ||
-      /^(description|role|technolog(?:y|ies)|tools|responsibilities|achievements|issuer|issued by|issuing organization|credential id|credential url|issue date|issued|expiry date|expiration date|url|link|institution|university|field of study|grade|cgpa|gpa|location|dates?)\s*:/i.test(
+      /^(description|role|technolog(?:y|ies)|tools|responsibilities|achievements|issuer|issued by|issuing organization|credential id|credential url|issue date|issued|expiry date|expiration date|expires|url|link|institution|university|field of study|grade|cgpa|gpa|location|dates?)\s*:/i.test(
         line.text,
       ) ||
       Boolean(dateRange(line.text)) ||
       Boolean(parseDate(line.text)) ||
-      /^(?:credential|verify(?: credential| certificate)?|verification|website|url|link)\s*\(https?:\/\//i.test(line.text) ||
+      /^(?:credential|verify(?: credential| certificate)?|verification|website|url|link)\s*\(https?:\/\//i.test(
+        line.text,
+      ) ||
       /^https?:\/\//i.test(line.text);
     const issuerContinuation =
       section === "certifications" &&
@@ -79,6 +106,22 @@ function namedBlocks(lines: SectionLine[], section: Section): SectionLine[][] {
       (!continuation && !issuerContinuation && section === "certifications")
     )
       blocks.push([line]);
+    else blocks[blocks.length - 1].push(line);
+  }
+  return blocks;
+}
+function internshipHeader(text: string) {
+  return strip(text).match(/^(.{1,90}\b(?:intern|trainee))\s+(?:-\s+|at\s+)(.{1,200})$/i);
+}
+function volunteerBlocks(lines: SectionLine[]): SectionLine[][] {
+  const blocks: SectionLine[][] = [];
+  for (const line of lines) {
+    const title = strip(line.text).split(/\s+-\s+|\s*\|\s*/)[0];
+    const roleHeader = /^(?:role|position)\s*:/i.test(title) ||
+      (title.length <= 100 && /\s+-\s+|\|/.test(line.text) &&
+        /\b(?:member|volunteer|mentor|coordinator|organizer|leader|president|secretary|treasurer)$/i.test(title)) ||
+      /^(?:(?:student|community|senior|junior|lead|executive)\s+)?(?:member|volunteer|mentor|coordinator|organizer|leader)$/i.test(title);
+    if (!blocks.length || roleHeader) blocks.push([line]);
     else blocks[blocks.length - 1].push(line);
   }
   return blocks;
@@ -100,6 +143,7 @@ const qualifications = [
   "Doctor of Pharmacy",
   "Associate of Applied Science",
   "Postgraduate Certificate",
+  "PGPCM",
   "Doctor of Philosophy",
   "Associate Degree",
   "High School Diploma",
@@ -131,7 +175,10 @@ export function qualification(text: string) {
   for (const value of qualifications) {
     const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const m = text.match(
-      new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "iu"),
+      new RegExp(
+        `(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])${value === "MS" ? "(?!\\s+(?:Office|Projects?|Excel|Word|Windows)\\b)" : ""}`,
+        "iu",
+      ),
     );
     if (m) return m[0];
   }
@@ -197,9 +244,14 @@ export function extractRecords(lines: SectionLine[]) {
         const cells = l.text.split(/\s*\|\s*/);
         // Column labels are not a preceding employment header. Leaving them in
         // the block hides the actual role/employer carried beside its dates.
-        return !(cells.length >= 3 && cells.every(c =>
-          /^(?:employer|company|organization|designation|job title|role|dates?|start|end|start date|end date|location|employment type)$/i.test(c),
-        ));
+        return !(
+          cells.length >= 3 &&
+          cells.every((c) =>
+            /^(?:employer|company|organization|designation|job title|role|dates?|start|end|start date|end date|location|employment type)$/i.test(
+              c,
+            ),
+          )
+        );
       })
       .map((l) => {
         const cells = l.text.split(/\s*\|\s*/);
@@ -212,11 +264,48 @@ export function extractRecords(lines: SectionLine[]) {
             }
           : l;
       });
-    const blocks = datedBlocks(source);
-    if (source.length && !blocks.length) warnings.push("UNRESOLVED_EMPLOYMENT");
+    // An explicitly named internship can be real without a continuous date
+    // interval. Keep separately stated year activities in its description.
+    const undated = new Set<SectionLine>();
+    for (let index = 0; index < source.length && employment.length < 100; index++) {
+      const line = source[index];
+      if (line.section !== "internships") continue;
+      const header = internshipHeader(line.text);
+      if (!header) continue;
+      let end = index + 1;
+      while (end < source.length && source[end].section === "internships" && !internshipHeader(source[end].text)) end++;
+      const block = source.slice(index, end);
+      if (block.some((l) => dateRange(l.text))) continue;
+      const companyLocation = header[2].match(/^(.*\b(?:ltd|limited|inc|llc|corporation)\.?),\s*(.+)$/i);
+      const entry: Entry = {
+        position: employment.length,
+        employer: companyLocation?.[1] ?? header[2],
+        designation: header[1],
+        location: companyLocation?.[2] ?? null,
+        employmentType: "Internship",
+        startDate: null,
+        endDate: null,
+        isCurrent: null,
+        description: block.slice(1).map((l) => l.text).join("\n").slice(0, 10000) || null,
+        responsibilities: block.slice(1).filter((l) => bullet.test(l.text)).slice(0, 50).map((l) => strip(l.text)),
+        achievements: [],
+      };
+      allEvidence.push(...proofs(`employment.${employment.length}`, entry, block, 0.8));
+      employment.push(entry);
+      block.forEach((l) => undated.add(l));
+      warnings.push("INTERNSHIP_DATES_UNRESOLVED");
+      index = end - 1;
+    }
+    const datedSource = source.filter((l) => !undated.has(l));
+    const blocks = datedBlocks(datedSource);
+    if (datedSource.length && !blocks.length) warnings.push("UNRESOLVED_EMPLOYMENT");
     for (const block of blocks.slice(0, 100)) {
       const section = block[0].section;
-      const dates = block.map((l) => dateRange(l.text)).find(Boolean)!;
+      const dates = block.map((l) => dateRange(l.text)).find(Boolean);
+      if (!dates) {
+        warnings.push("UNRESOLVED_EMPLOYMENT");
+        continue;
+      }
       const dateIndex = block.findIndex((l) => dateRange(l.text));
       const header = (
         dateIndex > 0
@@ -231,11 +320,52 @@ export function extractRecords(lines: SectionLine[]) {
         .trim();
       const designation =
         labeled(block, "designation|job title|role") ??
-        extractResumeFields(header).designation;
+        extractResumeFields(block[dateIndex].text.replace(dates.matched, "").split(/\s*\|\s*/).filter(c => !/\b(?:ltd|limited|inc|llc|corporation)\b/i.test(c)).join(" | "))
+          .designation ??
+        (block[dateIndex].text.includes("|") &&
+          !header.toLowerCase().startsWith(extractResumeFields(header).designation?.toLowerCase() ?? "\0")
+          ? null : extractResumeFields(header).designation);
+      if (
+        /\b(?:client|project(?: name| title)?)\s*:/i.test(header) &&
+        !/\b(?:employer|company|organization)\s*:/i.test(header)
+      ) {
+        warnings.push("AMBIGUOUS_EMPLOYER_CLIENT", "PROJECT_AS_EMPLOYMENT");
+        allEvidence.push(
+          ...block
+            .slice(0, 6)
+            .map((line) =>
+              evidence(
+                "observed.employment",
+                line,
+                ["AMBIGUOUS_EMPLOYER_CLIENT"],
+                0,
+              ),
+            ),
+        );
+        continue;
+      }
       let employer = labeled(block, "employer|company|organization");
       const at = header.match(/\s+at\s+(.+)$/i);
       if (!employer && at) employer = at[1].trim();
+      if (!employer && designation) {
+        const separated = header.match(/^(.+?)\s+-\s+(.+)$/);
+        if (
+          separated &&
+          separated[1].toLowerCase().includes(designation.toLowerCase())
+        )
+          employer = separated[2].trim();
+        else if (
+          dateIndex > 1 &&
+          !extractResumeFields(block[0].text).designation &&
+          /\b(?:limited|ltd|llc|inc|corporation|contracting|construction)\b/i.test(
+            block[0].text,
+          )
+        )
+          employer = block[0].text.split(/\s+-\s+/)[0].trim();
+      }
       const cells = header.split(/\s*[|]\s*/).filter(Boolean);
+      if (!employer && cells.length === 1 && /\b(?:ltd|limited|inc|llc|corporation)\b/i.test(cells[0]))
+        employer = cells[0];
       if (!employer && cells.length >= 2 && designation)
         employer = cells.find(
           (c) =>
@@ -281,10 +411,8 @@ export function extractRecords(lines: SectionLine[]) {
       const entry: Entry = {
         employer: employer ?? null,
         designation: designation ?? null,
-        location:
-          labeled(block, "location") ??
-          block[dateIndex].text.split(/\s*\|\s*/)[1]?.split(/\s*\/\s*/)[0] ??
-          null,
+        // An adjacent cell may be the employer, not a work location.
+        location: labeled(block, "location") ?? null,
         employmentType:
           section === "internships"
             ? "Internship"
@@ -322,14 +450,16 @@ export function extractRecords(lines: SectionLine[]) {
     }
   }
   for (const block of namedBlocks(
-    lines.filter((l) => l.section === "education"),
+    lines.filter((l) => l.section === "education" && !/^(?:bachelor|master)[’']s degree$/i.test(l.text)),
     "education",
   ).slice(0, 100)) {
     const first = block[0].text;
     const degree =
       labeled(block, "degree|qualification") ?? qualification(first);
+    const educationText = block.map((l) => l.text).join(" ");
     const institution =
       labeled(block, "institution|university|college|school") ??
+      educationText.match(/\(([^()]*\b(?:university|college|institute|school)\b[^()]*)\)/i)?.[1] ??
       block.find(
         (l) =>
           /\b(university|college|institute|school)\b/i.test(l.text) &&
@@ -357,6 +487,7 @@ export function extractRecords(lines: SectionLine[]) {
       institution: institution ?? null,
       fieldOfStudy:
         labeled(block, "field of study|major") ??
+        (degree ? first.slice(first.indexOf(degree) + degree.length).match(/^\s*(?:,|-|in)\s+([^|(]+)/i)?.[1]?.trim() : null) ??
         (fields && degree && !degree.includes(fields[1]) ? fields[1] : null),
       location: labeled(block, "location") ?? null,
       startDate: dates?.startDate ?? null,
@@ -373,7 +504,11 @@ export function extractRecords(lines: SectionLine[]) {
       ...proofs(`education.${education.length - 1}`, entry, block, 0.85),
     );
   }
-  const projectLines = lines.filter((l) => l.section === "projects");
+  const projectLines = lines.filter((l) => l.section === "projects" && !/^(?:current project|project handled)$/i.test(l.text)).map((l) => ({
+    ...l,
+    // A two-cell label/value table is equivalent to an explicit source label.
+    text: l.text.replace(/^(project|client|company|contractor|description|responsibilities)\s*\|\s*/i, "$1: "),
+  }));
   // Projects require an explicit named header. Unlabelled prose is retained as a description, not many invented projects.
   const projectStarts = projectLines.flatMap((l, i) =>
     /^(?:project|project name|name)\s*:/i.test(l.text) ||
@@ -393,7 +528,7 @@ export function extractRecords(lines: SectionLine[]) {
     const name = block[0].text.replace(
       /^(?:project|project name|name)\s*:\s*/i,
       "",
-    );
+    ).replace(/:\s*$/, "");
     if (
       bullet.test(name) ||
       name.length > 200 ||
@@ -467,7 +602,26 @@ export function extractRecords(lines: SectionLine[]) {
           ),
       );
   }
-  let certificationLines = lines.filter((l) => l.section === "certifications");
+  let certificationLines: SectionLine[] = [];
+  for (const line of lines.filter((l) => l.section === "certifications")) {
+    const previous = certificationLines.at(-1);
+    if (previous && bullet.test(previous.text) && !bullet.test(line.text) && /(?:and|in|of|&)\s*$/i.test(previous.text))
+      previous.text += " " + line.text;
+    else certificationLines.push({ ...line });
+  }
+  certificationLines = certificationLines.map((l) => ({ ...l, text: strip(l.text) }));
+  const groupedCertificationLines = new Set<number>();
+  certificationLines = certificationLines.flatMap((line, index, source) => {
+    const cells = line.text.split(/\s*\|\s*/);
+    // Split only unlabelled lists in an explicit certification section. A
+    // credential/issuer/date table is a relationship, not a list of credentials.
+    if (/^(?:issuer|issued by|issued|issue date|expires|expiry date|credential id|credential url)\s*:/i.test(source[index + 1]?.text ?? "") ||
+      cells.length < 2 || cells.some((cell) => !cell || cell.length > 200 || /:|https?:/i.test(cell) ||
+      /^(?:credential\s*\/\s*issuer|issued\s*\/\s*expiry|issuer|issued|expiry|credential id|name)$/i.test(cell) ||
+      /\b(?:19|20|21)\d{2}\b/.test(cell) || parseDate(cell) || dateRange(cell))) return [line];
+    groupedCertificationLines.add(line.line);
+    return cells.map((text) => ({ ...line, text }));
+  });
   if (
     certificationLines.some((l) =>
       /^Credential\s*\/\s*issuer\s*\|\s*Issued\s*\/\s*expiry\s*\|/i.test(
@@ -534,7 +688,8 @@ export function extractRecords(lines: SectionLine[]) {
         entry,
         block,
         0.86,
-      ),
+      ).map((proof) => groupedCertificationLines.has(block[0].line)
+        ? { ...proof, signals: [...proof.signals, "GROUPED_CERTIFICATION_CLAIM"] } : proof),
     );
   }
   const additionalTypes = {
@@ -545,7 +700,10 @@ export function extractRecords(lines: SectionLine[]) {
     qualifications: "QUALIFICATION",
   } as const;
   for (const [section, type] of Object.entries(additionalTypes))
-    for (const line of lines.filter((l) => l.section === section)) {
+    for (const block of section === "volunteering"
+      ? volunteerBlocks(lines.filter((l) => l.section === section))
+      : lines.filter((l) => l.section === section).map((l) => [l])) {
+      const line = block[0];
       for (const title of section === "languages"
         ? line.text.split(/[,;]|\s+\/\s+/)
         : [line.text]) {
@@ -559,14 +717,14 @@ export function extractRecords(lines: SectionLine[]) {
           type,
           title: strip(language?.[1] ?? title).slice(0, 200),
           details: {
-            description: line.text.slice(0, 10000),
+            description: block.map((l) => l.text).join("\n").slice(0, 10000),
             ...(language ? { proficiency: language[2] ?? language[3] } : {}),
           },
         };
         if (!entry.title) continue;
         additional.push(entry);
         allEvidence.push(
-          ...proofs(`additional.${additional.length - 1}`, entry, [line], 0.83),
+          ...proofs(`additional.${additional.length - 1}`, entry, block, 0.83),
         );
       }
     }

@@ -1,6 +1,7 @@
 import { skillDictionary } from "../dictionaries/skills";
 import { evidence, type MachineEvidence } from "../field-confidence";
 import type { SectionLine } from "../section-detector";
+import { contaminatedSkill, industrialAws } from "../suspicious";
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const patterns = skillDictionary.map((skill) => ({
   skill,
@@ -24,6 +25,7 @@ export function extractSkills(lines: SectionLine[]) {
     }
   >();
   const proofs: MachineEvidence[] = [];
+  const warnings: string[] = [];
   const explicit = lines.filter(
     (l) =>
       l.section === "skills" ||
@@ -32,19 +34,38 @@ export function extractSkills(lines: SectionLine[]) {
           l.text,
         )),
   );
-  const groups =
-    explicit.some((l) => /[,;]|\s\/\s/.test(l.text)) &&
-    explicit.every((l) => l.section === "skills")
-      ? [{ ...explicit[0], text: explicit.map((l) => l.text).join(" ") }]
-      : explicit;
+  const groups = explicit;
   for (const line of groups)
     for (const raw of line.text
       .replace(
         /^(?:technolog(?:y|ies)|methods\s*\/\s*tools|tools|skills)\s*:\s*/i,
         "",
       )
-      .split(/[,;|]|\s+\/\s+/)) {
-      const value = raw.trim();
+      // A spaced list slash can touch a PDF line boundary. Preserve compact
+      // terms such as CI/CD while excluding the orphan delimiter from skills.
+      .split(/[,;|]|\s+\/(?:\s+|$)|^\/\s+/)) {
+      const value = raw.replace(/^\s*[-•*]\s*/, "").trim();
+      if (contaminatedSkill(value)) {
+        warnings.push("SKILL_CONTAMINATION");
+        proofs.push(
+          evidence("observed.skills", line, ["SKILL_CONTAMINATION"], 0),
+        );
+        continue;
+      }
+      if (
+        /\b(?:responsible for|worked on|project description|address\s*:)\b/i.test(
+          value,
+        )
+      )
+        warnings.push("SKILL_CONTAMINATION");
+      const welding = industrialAws(line.text);
+      if (welding) warnings.push("AMBIGUOUS_AWS_CONTEXT");
+      if (welding && /^AWS$/i.test(value)) {
+        proofs.push(
+          evidence("observed.skills", line, ["AMBIGUOUS_AWS_CONTEXT"], 0),
+        );
+        continue;
+      }
       if (
         !value ||
         value.length > 120 ||
@@ -52,11 +73,14 @@ export function extractSkills(lines: SectionLine[]) {
         /[!?]|\.$/.test(value)
       )
         continue;
-      const known = skillDictionary.find((s) =>
-        [s.name, ...s.aliases].some(
-          (v) => v.toLowerCase() === value.toLowerCase(),
-        ),
-      );
+      const known =
+        welding && /^AWS\b/i.test(value)
+          ? undefined
+          : skillDictionary.find((s) =>
+              [s.name, ...s.aliases].some(
+                (v) => v.toLowerCase() === value.toLowerCase(),
+              ),
+            );
       const name = known?.name ?? value;
       if (!skills.has(name))
         skills.set(name, {
@@ -94,6 +118,20 @@ export function extractSkills(lines: SectionLine[]) {
       )
         continue;
       for (const match of line.text.matchAll(regex)) {
+        if (match[0].toUpperCase() === "AWS" && industrialAws(line.text)) {
+          warnings.push("AMBIGUOUS_AWS_CONTEXT");
+          proofs.push(
+            evidence("observed.skills", line, ["AMBIGUOUS_AWS_CONTEXT"], 0),
+          );
+          continue;
+        }
+        // CRM also denotes cold rolling mills in industrial resumes.
+        if (
+          match[0].toUpperCase() === "CRM" &&
+          /\b(?:mills?|rolling|steel)\b/i.test(line.text) &&
+          !/\b(?:customer|sales|relationship)\b/i.test(line.text)
+        )
+          continue;
         // JS/TS/R abbreviations require explicit skills/tool context and original capitals.
         if (
           ["js", "ts", "r"].includes(match[0].toLowerCase()) &&
@@ -131,5 +169,17 @@ export function extractSkills(lines: SectionLine[]) {
   return {
     items: [...skills.values()].slice(0, 100),
     evidence: proofs.slice(0, 300),
+    warnings: [
+      ...new Set([
+        ...warnings,
+        ...(explicit.some(
+          (l) =>
+            /\|/.test(l.text) &&
+            /\b(?:and|with|using|of|to)\b|\w-\s*\|/i.test(l.text),
+        )
+          ? ["AMBIGUOUS_SKILL_LAYOUT"]
+          : []),
+      ]),
+    ],
   };
 }

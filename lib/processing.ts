@@ -9,6 +9,7 @@ import type { ResumeExtraction } from "./resume-parser";
 import type { StructuredExtraction } from "./resume-parser/index";
 import { persistStructured } from "./resume-parser/persistence";
 import { reviewDecision } from "./resume-parser/review-policy";
+import { safeProcessingError } from "./processing-diagnostics";
 
 export const terminalStatuses: ResumeStatus[] = [
   "COMPLETED",
@@ -140,6 +141,71 @@ export async function renewClaim(db: PrismaClient, id: string, token: string) {
   return changed === 1;
 }
 
+// A committed attempt survives Redis restarts and worker crashes. The marker
+// fences one experimental AI phase per explicitly requested processing generation.
+// Nothing is submitted to Ollama until this short transaction has committed.
+export async function claimHybridAttempt(
+  db: PrismaClient,
+  id: string,
+  token: string,
+  generation: number,
+) {
+  return transaction(db, async (tx) => {
+    const resume = await tx.resume.findFirst({
+      where: {
+        ...owned(id, token, await databaseNow(tx)),
+        processingGeneration: generation,
+        extraction: { isNot: { reviewedAt: { not: null } } },
+        batch: { isNot: { status: "CANCELLED" } },
+      },
+    });
+    if (!resume) return false;
+    const parserVersion = `worker-hybrid-attempt-g${generation}`;
+    const previous = await tx.extractionRun.findFirst({
+        where: { resumeId: id, parserVersion },
+        select: { id: true, evidence: { where: { fieldPath: "processing.hybrid.attempt" }, select: { text: true } } },
+      });
+    if (previous) {
+      // Legacy reservations are ambiguous. Only an explicit live-process proof
+      // that zero generate requests started permits reuse of a reservation.
+      if (previous.evidence?.length !== 1 || previous.evidence[0].text !== "EXPERIMENTAL_AI_NO_REQUEST") return false;
+      return (await tx.candidateEvidence.updateMany({ where: { runId: previous.id, fieldPath: "processing.hybrid.attempt", text: "EXPERIMENTAL_AI_NO_REQUEST" },
+        data: { text: "EXPERIMENTAL_AI_RESERVED_V2" } })).count === 1;
+    }
+    await tx.extractionRun.create({
+      data: {
+        resumeId: id,
+        method: "LOCAL",
+        parserVersion,
+        startedAt: new Date(),
+        evidence: {
+          create: {
+            fieldPath: "processing.hybrid.attempt",
+            sourceSection: "processing",
+            text: "EXPERIMENTAL_AI_RESERVED_V2",
+            confidence: 0,
+          },
+        },
+      },
+    });
+    return true;
+  });
+}
+
+export type HybridAttemptState = "REQUEST_INTENT" | "COMPLETED" | "NO_REQUEST" | "UNCERTAIN";
+export async function recordHybridAttemptState(db: PrismaClient, id: string, token: string, generation: number, state: HybridAttemptState) {
+  return transaction(db, async tx => {
+    if (!await tx.resume.findFirst({ where: { ...owned(id, token, await databaseNow(tx)), processingGeneration: generation,
+      extraction: { isNot: { reviewedAt: { not: null } } } }, select: { id: true } })) return false;
+    const run = await tx.extractionRun.findFirst({ where: { resumeId: id, parserVersion: `worker-hybrid-attempt-g${generation}` }, select: { id: true } });
+    if (!run) return false;
+    const allowed = state === "REQUEST_INTENT" ? ["EXPERIMENTAL_AI_RESERVED_V2", "EXPERIMENTAL_AI_COMPLETED"] :
+      state === "NO_REQUEST" ? ["EXPERIMENTAL_AI_RESERVED_V2", "EXPERIMENTAL_AI_REQUEST_INTENT"] : ["EXPERIMENTAL_AI_REQUEST_INTENT"];
+    return (await tx.candidateEvidence.updateMany({ where: { runId: run.id, fieldPath: "processing.hybrid.attempt", text: { in: allowed } },
+      data: { text: `EXPERIMENTAL_AI_${state}` } })).count === 1;
+  });
+}
+
 export async function finalizeResume(
   db: PrismaClient,
   id: string,
@@ -150,6 +216,7 @@ export async function finalizeResume(
     startedAt: Date;
     method?: ExtractionMethod;
     structured?: StructuredExtraction;
+    hybridFallback?: StructuredExtraction;
   },
 ) {
   return transaction(db, async (tx) => {
@@ -173,6 +240,32 @@ export async function finalizeResume(
     });
     if (existing?.reviewedAt)
       throw new Error("Reviewed extraction cannot be replaced");
+    // First-fill protection is checked inside the same serializable transaction
+    // as persistence, including profiles created while inference was in flight.
+    if (
+      provenance?.hybridFallback &&
+      (existing ||
+        (await tx.candidateProfile.findUnique({
+          where: { resumeId: id },
+          select: { resumeId: true },
+        })))
+    ) {
+      const fallback = {
+        ...provenance.hybridFallback,
+        warnings: [
+          ...new Set([
+            ...provenance.hybridFallback.warnings,
+            "EXPERIMENTAL_HYBRID_REVIEW",
+          ]),
+        ],
+      };
+      extraction = fallback.basic;
+      provenance = {
+        ...provenance,
+        parserVersion: fallback.parserVersion,
+        structured: fallback,
+      };
+    }
     const predicates = [
       ...(extraction.email ? [{ email: extraction.email }] : []),
       ...(extraction.normalizedPhone
@@ -252,7 +345,11 @@ export async function finalizeResume(
       where: { resumeId: id },
       include: { skills: { include: { skill: true } }, links: true },
     });
-    const decision = reviewDecision(savedExtraction, candidate);
+    const decision = reviewDecision(
+      savedExtraction,
+      candidate,
+      provenance?.structured?.warnings,
+    );
     await tx.resumeExtraction.update({
       where: { resumeId: id },
       data: { requiresReview: decision.requiresReview },
@@ -262,7 +359,9 @@ export async function finalizeResume(
       data: {
         status: duplicate
           ? "DUPLICATE"
-          : decision.requiresReview ? "REVIEW" : "COMPLETED",
+          : decision.requiresReview
+            ? "REVIEW"
+            : "COMPLETED",
       },
     });
     await tx.candidateEvidence.create({
@@ -286,6 +385,7 @@ export class PermanentProcessingError extends Error {
       | "FILE_HASH_MISMATCH"
       | "UNSUPPORTED_FORMAT"
       | "EMPTY_DOCUMENT"
+      | "STRUCTURED_EXTRACTION_FAILED"
       | "INVALID_DOCUMENT" = "INVALID_DOCUMENT",
   ) {
     super(reason);
@@ -322,9 +422,14 @@ export function classifyError(error: unknown) {
               "EACCES",
               "P1001",
               "P2034",
+              "P2028",
+              "P2024",
+              "P1017",
+              "P1002",
+              "P1008",
             ].includes(e?.code ?? "")
           ? e.code
-          : "UNKNOWN";
+          : safeProcessingError(error).code;
   return {
     permanent,
     type: permanent ? "PERMANENT" : "RETRYABLE",

@@ -33,7 +33,7 @@ export function parseDate(value: string): PartialCandidateDate | null {
     year = +m[2];
   } else if (
     (m = text.match(
-      /^(?:(\d{1,2})\s+)?([a-z]{3,9})\.?\s+((?:19|20|21)\d{2})$/i,
+      /^(?:(\d{1,2})(?:st|nd|rd|th)?\s+)?([a-z]{3,9})\.?\s+((?:19|20|21)\d{2})$/i,
     ))
   ) {
     const index = months.indexOf(m[2].slice(0, 3).toLowerCase());

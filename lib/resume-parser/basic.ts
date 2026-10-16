@@ -79,18 +79,23 @@ const titleRegex = new RegExp(
   "i",
 );
 const roleNouns =
-  "developer|engineer|analyst|manager|accountant|nurse|teacher|designer|executive|pharmacist|paralegal|chef|scientist|coordinator|administrator|supervisor|assistant|consultant|architect|recruiter|specialist|planner|fellow|resident|representative|tutor|director|associate|partner|intern|trainee|chef de partie";
+  "developer|engineer|analyst|manager|accountant|nurse|teacher|designer|executive|pharmacist|paralegal|chef|scientist|chemist|superintendent|officer|leader|head|surveyor|coordinator|administrator|supervisor|assistant|consultant|architect|recruiter|specialist|planner|fellow|resident|representative|tutor|director|associate|partner|intern|trainee|chef de partie";
 // Full standalone roles preserve seniority and specialties. Dictionary matching
 // remains a fallback for prose, not a prerequisite for recognizing a job header.
 export function jobTitle(line: string): string | null {
+  const specialized = line.replace(/^(?:designation|job title|role)\s*:\s*/i, "").trim()
+    .match(/^([\p{L}][\p{L} &./'-]{1,70}(?:manager|engineer|director|officer))\s*-\s*(MEP|HVAC|HSE|EHS|QA|QC|IT|HR|BIM|R&D|M&E)$/iu);
+  if (specialized) return `${specialized[1]} - ${specialized[2]}`;
   const candidate = line
     .replace(/^(?:designation|job title|role)\s*:\s*/i, "")
     .split(/\s*[|\t]\s*|\s+at\s+/i)[0]
+    .split(/\s+[-–—]\s+/)[0]
+    .replace(/\s*\([^)]*\)\s*$/, "")
     .trim();
   if (
     candidate.length <= 100 &&
     new RegExp(
-      `^(?:[\\p{L}][\\p{L}./&'-]*\\s+){0,6}(?:${roleNouns})$`,
+      `^(?:(?:[\\p{L}][\\p{L}./&'-]*|&)\\s+){0,6}(?:${roleNouns})$`,
       "iu",
     ).test(candidate)
   )
@@ -133,7 +138,7 @@ export function extractResumeFields(
       index > 8 ||
       line.length < 4 ||
       line.length > 54 ||
-      /@|\d|[:|]|resume|curriculum|portfolio|profile|summary|experience|education|phone|address|linkedin/i.test(
+      /@|\d|[:|]|resume|curricul[au]m|portfolio|profile|summary|experience|education|phone|address|linkedin/i.test(
         line,
       ) ||
       jobTitle(line)
@@ -143,8 +148,9 @@ export function extractResumeFields(
     return (
       words.length >= 2 &&
       words.length <= 4 &&
+      words.some((word) => /^[\p{L}][\p{L}'-]+$/u.test(word)) &&
       words.every(
-        (word) => word.length > 1 && /^[\p{L}][\p{L}'-]*$/u.test(word),
+        (word) => /^(?:[\p{L}][\p{L}'-]*|(?:\p{L}\.){1,4})$/u.test(word),
       )
     );
   });

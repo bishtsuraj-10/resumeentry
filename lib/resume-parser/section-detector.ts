@@ -31,6 +31,10 @@ export const headings: Record<
     "profile",
     "professional profile",
     "about me",
+    "executive profile",
+    "synopsis",
+    "professional synopsis",
+    "professional overview",
   ],
   objective: ["objective", "career objective"],
   skills: [
@@ -42,6 +46,8 @@ export const headings: Record<
     "key skills",
     "expertise",
     "skills and competencies",
+    "software",
+    "productive tools",
   ],
   employment: [
     "experience",
@@ -51,6 +57,10 @@ export const headings: Record<
     "employment history",
     "work history",
     "career history",
+    "employment chronology",
+    "career timeline",
+    "career profile",
+    "carrier profile",
   ],
   education: [
     "education",
@@ -63,15 +73,25 @@ export const headings: Record<
     "projects",
     "key projects",
     "academic projects",
+    "academic project",
+    "final year project",
+    "final-year project",
+    "final year projects",
+    "final-year projects",
+    "capstone project",
+    "capstone projects",
     "professional projects",
     "personal projects",
     "selected work",
+    "work experience- summary",
+    "work experience - summary",
   ],
   certifications: [
     "certifications",
     "certificates",
     "licenses",
     "licenses and certifications",
+    "certifications and licenses",
     "credentials",
     "professional registration",
   ],
@@ -89,6 +109,7 @@ export const headings: Record<
   qualifications: ["other qualifications", "additional qualifications"],
   personal: [
     "personal details",
+    "other personal details",
     "personal information",
     "contact",
     "contact information",
@@ -110,6 +131,7 @@ export function heading(value: string): {
   const cleaned = value.replace(/^[#*•\s]+|[\s:*#-]+$/g, "").trim();
   const colon = cleaned.indexOf(":");
   const label = (colon < 0 ? cleaned : cleaned.slice(0, colon))
+    .replace(/&/g, " and ")
     .replace(/\s+/g, " ")
     .toLowerCase();
   // Also recognize headings printed with spaces between letters.
@@ -130,6 +152,11 @@ export function detectSections(lines: SourceLine[]): SectionLine[] {
   const lanes = new Map<number, Section>();
   const result: SectionLine[] = [];
   for (const line of lines) {
+    if (line.columnStart) {
+      current = "header";
+      lanes.clear();
+    }
+    if (/^I declare\b/i.test(line.text)) current = "unknown";
     const cells = line.text.split(/\t+/);
     // Independent sections in aligned columns: remember each lane's heading.
     if (cells.length > 1 && cells.some((v) => heading(v))) {
@@ -172,7 +199,7 @@ export function detectSections(lines: SourceLine[]): SectionLine[] {
       ) &&
       !(
         current === "skills" &&
-        (/^\S{2,8}$/.test(line.text) || /[&+#.]/.test(line.text)) &&
+        (/^\S{2,8}$/.test(line.text) || /^(?:auto cad|ms office)$/i.test(line.text) || /[&+#.]/.test(line.text)) &&
         !/^(?:hobbies|interests|activities)$/i.test(line.text)
       ) &&
       !skillDictionary.some((s) =>
@@ -188,7 +215,9 @@ export function detectSections(lines: SourceLine[]): SectionLine[] {
       result.push({
         ...line,
         // Preserve cell markers for table-aware record parsing.
-        text: line.text.replace(/\t+/g, " | "),
+        text: current === "employment"
+          ? line.text.replace(/^[-•*]\s*/, "").replace(/\s+I\s+/g, " | ").replace(/,\s*(?=[A-Za-z]+\s+\d{4}\s*(?:to|-))/, " | ").replace(/\t+/g, " | ")
+          : line.text.replace(/\t+/g, " | "),
         section: current,
       });
   }
