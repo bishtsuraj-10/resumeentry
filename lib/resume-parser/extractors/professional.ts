@@ -5,6 +5,15 @@ import { evidence, type MachineEvidence } from "../field-confidence";
 export function extractProfessional(lines: SectionLine[]) {
   const profile: Record<string, unknown> = {};
   const proofs: MachineEvidence[] = [];
+  let hasQualifiedExperience = false;
+  for (const line of lines.filter(l => l.section === "header" || l.section === "summary")) {
+    const claim = line.text.match(/(?:(?:over|about|approximately|at least|more than)\s+)?\d+(?:\.\d+)?\s*\+?\s*years?(?:\s+(?:and\s+)?\d+\s*months?)?\s+(?:of\s+)?(?:professional |work |total |overall )?experience/i);
+    if (!claim || !/^(?:over|about|approximately|at least|more than)\b|\d\s*\+/i.test(claim[0]) ||
+      /\b(?:team|company|organization|requires?|requiring|combined)\b/i.test(line.text.slice(0, claim.index))) continue;
+    hasQualifiedExperience = true;
+    proofs.push({ ...evidence("observed.profile.experienceClaim", line,
+      ["EXPLICIT_DURATION_CLAIM", /\+|^(?:over|at least|more than)\b/i.test(claim[0]) ? "LOWER_BOUND" : "APPROXIMATE"], 0.9), text: claim[0] });
+  }
   for (const [section, key] of [
     ["summary", "summary"],
     ["objective", "objective"],
@@ -164,6 +173,7 @@ export function extractProfessional(lines: SectionLine[]) {
     }
   }
   return {
+    hasQualifiedExperience,
     profile,
     designation: designation.designation,
     designationConfidence: designation.designationConfidence,

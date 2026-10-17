@@ -13,7 +13,7 @@ import { experienceMonths } from "./validators/dates";
 import { evidence, type MachineEvidence } from "./field-confidence";
 import type { ResumeExtraction } from "./basic";
 import { suspiciousTargets } from "./suspicious";
-export const PARSER_VERSION = "local-comprehensive-v1.4.1-experimental";
+export const PARSER_VERSION = "local-comprehensive-v1.6.0-experimental";
 export interface StructuredExtraction {
   basic: ResumeExtraction;
   candidate: Omit<CandidatePatch, "expectedRevision">;
@@ -45,7 +45,7 @@ export function extractStructuredResume(
     ...records.evidence,
     ...links.evidence,
   ];
-  if (profile.totalExperienceMonths == null) {
+  if (profile.totalExperienceMonths == null && !professional.hasQualifiedExperience) {
     const months = records.warnings.some((w) =>
       ["UNRESOLVED_EMPLOYMENT", "UNCERTAIN_EMPLOYER"].includes(w),
     )

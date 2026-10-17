@@ -4,6 +4,7 @@ import { dateRange, parseDate } from "../validators/dates";
 import { extractResumeFields } from "../basic";
 import { extractSkills } from "./skills";
 import { safeUrlSchema } from "../../candidate-validation";
+import { stackedEmploymentHeader } from "../employment-header";
 type Entry = Record<string, unknown>;
 const bullet = /^[-•*]\s*/;
 const strip = (s: string) => s.replace(bullet, "").trim();
@@ -28,6 +29,12 @@ function datedBlocks(lines: SectionLine[]): SectionLine[][] {
     if (!dateRange(lines[i].text)) continue;
     let start = i;
     const range = dateRange(lines[i].text)!;
+    if (i > 0 && lines[i - 1].page === lines[i].page &&
+      lines[i].line === lines[i - 1].line + 1 &&
+      stackedEmploymentHeader(lines[i - 1].text, lines[i].text)) {
+      starts.add(i - 1);
+      continue;
+    }
     // Date-led rows often contain location/type cells; they still belong to
     // the preceding title/employer header. Only a row carrying identity cells
     // before its dates is self-contained.
@@ -127,6 +134,10 @@ function volunteerBlocks(lines: SectionLine[]): SectionLine[][] {
   return blocks;
 }
 const qualifications = [
+  "Bachelor of Architecture",
+  "Master of Architecture",
+  "B.Arch.",
+  "M.Arch.",
   "Bachelor of Technology",
   "Bachelor of Engineering",
   "Bachelor of Science",
@@ -318,7 +329,9 @@ export function extractRecords(lines: SectionLine[]) {
         .replace(dates.matched, "")
         .replace(/[-|\s]+$/, " ")
         .trim();
-      const designation =
+      const stacked = dateIndex === 1 && block[0].page === block[1].page &&
+        block[1].line === block[0].line + 1 ? stackedEmploymentHeader(block[0].text, block[1].text) : null;
+      const designation = stacked?.designation ??
         labeled(block, "designation|job title|role") ??
         extractResumeFields(block[dateIndex].text.replace(dates.matched, "").split(/\s*\|\s*/).filter(c => !/\b(?:ltd|limited|inc|llc|corporation)\b/i.test(c)).join(" | "))
           .designation ??
@@ -344,7 +357,7 @@ export function extractRecords(lines: SectionLine[]) {
         );
         continue;
       }
-      let employer = labeled(block, "employer|company|organization");
+      let employer = stacked?.employer ?? labeled(block, "employer|company|organization");
       const at = header.match(/\s+at\s+(.+)$/i);
       if (!employer && at) employer = at[1].trim();
       if (!employer && designation) {
@@ -412,7 +425,7 @@ export function extractRecords(lines: SectionLine[]) {
         employer: employer ?? null,
         designation: designation ?? null,
         // An adjacent cell may be the employer, not a work location.
-        location: labeled(block, "location") ?? null,
+        location: labeled(block, "location") ?? stacked?.location ?? null,
         employmentType:
           section === "internships"
             ? "Internship"
@@ -436,17 +449,25 @@ export function extractRecords(lines: SectionLine[]) {
         .map((l) => l.text)
         .join("\n");
       if (body) entry.description = body.slice(0, 10000);
-      const position = employment.length;
-      entry.position = position;
-      employment.push(entry);
-      allEvidence.push(
-        ...proofs(
-          `employment.${position}`,
-          entry,
-          block,
-          employer ? 0.86 : 0.62,
-        ),
-      );
+      // Multiple comma/semicolon-separated intervals on the same owned role row
+      // are separate source claims, not one continuous span. Keep overlaps.
+      const intervals = [dates];
+      let tail = block[dateIndex].text.slice(block[dateIndex].text.indexOf(dates.matched) + dates.matched.length).trim();
+      const ownedIntervalRow = stacked || (designation && block[dateIndex].text.toLowerCase().startsWith(designation.toLowerCase()));
+      while (ownedIntervalRow && /^(?:[,;|]|and\b)/i.test(tail)) {
+        tail = tail.replace(/^(?:[,;|]|and\b)\s*/i, "");
+        const next = dateRange(tail);
+        if (!next || !tail.startsWith(next.matched)) break;
+        intervals.push(next);
+        tail = tail.slice(next.matched.length).trim();
+      }
+      for (const interval of intervals) {
+        if (employment.length >= 100) break;
+        const position = employment.length;
+        const item = { ...entry, position, startDate: interval.startDate, endDate: interval.endDate, isCurrent: interval.isCurrent };
+        employment.push(item);
+        allEvidence.push(...proofs(`employment.${position}`, item, block, employer ? 0.86 : 0.62));
+      }
     }
   }
   for (const block of namedBlocks(
@@ -457,9 +478,16 @@ export function extractRecords(lines: SectionLine[]) {
     const degree =
       labeled(block, "degree|qualification") ?? qualification(first);
     const educationText = block.map((l) => l.text).join(" ");
+    // Split a compact degree/institution row only when its ownership is explicit.
+    // Do not collapse multi-school tables or choose one of several affiliations.
+    const institutionCells = block.filter(l => qualification(l.text)).flatMap(l => l.text.split(/\s*\|\s*/)).filter(cell =>
+      /\b(?:university|college|institute|school)\b/i.test(cell) && !qualification(cell));
+    const institutionCell = institutionCells.length === 1 ? institutionCells[0] : undefined;
+    const institutionYear = degree ? institutionCell?.match(/,\s*((?:19|20|21)\d{2})$/)?.[1] : undefined;
     const institution =
       labeled(block, "institution|university|college|school") ??
       educationText.match(/\(([^()]*\b(?:university|college|institute|school)\b[^()]*)\)/i)?.[1] ??
+      (institutionCell && (institutionYear ? institutionCell.replace(/,\s*\d{4}$/, "").trim() : institutionCell)) ??
       block.find(
         (l) =>
           /\b(university|college|institute|school)\b/i.test(l.text) &&
@@ -491,7 +519,8 @@ export function extractRecords(lines: SectionLine[]) {
         (fields && degree && !degree.includes(fields[1]) ? fields[1] : null),
       location: labeled(block, "location") ?? null,
       startDate: dates?.startDate ?? null,
-      endDate: dates?.endDate ?? (completion ? parseDate(completion) : null),
+      endDate: dates?.endDate ?? (completion ? parseDate(completion) :
+        !dates && degree && institution ? parseDate(institutionYear ?? (block.length === 3 && block[1].text === institution ? block[2].text : "")) : null),
       grade: grade?.[1] ?? null,
       gradeScale: grade?.[2] ?? null,
       description: block

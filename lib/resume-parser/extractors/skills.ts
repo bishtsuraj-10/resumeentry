@@ -3,6 +3,7 @@ import { evidence, type MachineEvidence } from "../field-confidence";
 import type { SectionLine } from "../section-detector";
 import { contaminatedSkill, industrialAws } from "../suspicious";
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const competencyBullet = /^[-•*●▪\uF076\uF0B7]\s*/;
 const patterns = skillDictionary.map((skill) => ({
   skill,
   regex: new RegExp(
@@ -34,17 +35,27 @@ export function extractSkills(lines: SectionLine[]) {
           l.text,
         )),
   );
-  const groups = explicit;
+  const groups: (SectionLine & { lastLine: number })[] = [];
+  const coveredCompetencies = new Set<string>();
+  for (const line of explicit) {
+    const previous = groups[groups.length - 1];
+    if (line.skillFormat === "competency" && previous?.skillFormat === "competency" &&
+      previous.page === line.page && line.line === previous.lastLine + 1 &&
+      competencyBullet.test(previous.text) && !competencyBullet.test(line.text)) {
+      previous.text += " " + line.text;
+      previous.lastLine = line.line;
+    } else groups.push({ ...line, lastLine: line.line });
+  }
   for (const line of groups)
-    for (const raw of line.text
+    for (const raw of (line.skillFormat === "competency" && competencyBullet.test(line.text) ? [line.text] : line.text
       .replace(
         /^(?:technolog(?:y|ies)|methods\s*\/\s*tools|tools|skills)\s*:\s*/i,
         "",
       )
       // A spaced list slash can touch a PDF line boundary. Preserve compact
       // terms such as CI/CD while excluding the orphan delimiter from skills.
-      .split(/[,;|]|\s+\/(?:\s+|$)|^\/\s+/)) {
-      const value = raw.replace(/^\s*[-•*]\s*/, "").trim();
+      .split(/[,;|]|\s+\/(?:\s+|$)|^\/\s+/))) {
+      const value = raw.replace(line.skillFormat === "competency" ? competencyBullet : /^\s*[-•*]\s*/, "").trim();
       if (contaminatedSkill(value)) {
         warnings.push("SKILL_CONTAMINATION");
         proofs.push(
@@ -69,7 +80,7 @@ export function extractSkills(lines: SectionLine[]) {
       if (
         !value ||
         value.length > 120 ||
-        value.split(/\s+/).length > 8 ||
+        value.split(/\s+/).length > (line.skillFormat === "competency" ? 20 : 8) ||
         /[!?]|\.$/.test(value)
       )
         continue;
@@ -82,6 +93,8 @@ export function extractSkills(lines: SectionLine[]) {
               ),
             );
       const name = known?.name ?? value;
+      if (line.skillFormat === "competency" && competencyBullet.test(line.text))
+        for (let ordinal = line.line; ordinal <= line.lastLine; ordinal++) coveredCompetencies.add(`${line.page}:${ordinal}`);
       if (!skills.has(name))
         skills.set(name, {
           name,
@@ -102,6 +115,9 @@ export function extractSkills(lines: SectionLine[]) {
         );
     }
   for (const line of lines) {
+    // One accepted competency bullet is one source-supported skill; avoid
+    // appending redundant dictionary fragments of that same statement.
+    if (line.skillFormat === "competency" && coveredCompetencies.has(`${line.page}:${line.line}`)) continue;
     if (
       !["skills", "projects", "employment", "internships", "summary"].includes(
         line.section,

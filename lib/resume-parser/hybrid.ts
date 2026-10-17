@@ -557,6 +557,32 @@ export function mergeNuProposal(
         diagnostic(section, "invalid", "INCOMPLETE_EMPLOYMENT_TUPLE");
         continue;
       }
+      if (section === "employment") {
+        // Co-occurrence in a local quote does not make a reporting manager's
+        // title the candidate's role. Retain an independent owned occurrence.
+        let offset = 0;
+        let ownedRole = false;
+        while (offset < quote.length) {
+          const span = sourceSpan(quote.slice(offset), record.designation!);
+          if (!span) break;
+          const start = offset + span.start;
+          const lineStart = quote.lastIndexOf("\n", start - 1) + 1;
+          const prefix = quote.slice(lineStart, start);
+          const previousStart = lineStart ? quote.lastIndexOf("\n", lineStart - 2) + 1 : 0;
+          const previousLine = quote.slice(previousStart, lineStart);
+          const reportingRole = /\b(?:reports?|reporting)(?:\s+directly)?\s+to\b/i.test(prefix) ||
+            /\b(?:reports?|reporting)(?:\s+directly)?\s+to(?:\s+the)?\s*$/i.test(previousLine + prefix);
+          if (!reportingRole) {
+            ownedRole = true;
+            break;
+          }
+          offset += span.end;
+        }
+        if (!ownedRole) {
+          diagnostic(section, "invalid", "SUPERVISOR_ROLE_IS_NOT_CANDIDATE_ROLE");
+          continue;
+        }
+      }
       if (
         dates?.day ||
         end?.day ||

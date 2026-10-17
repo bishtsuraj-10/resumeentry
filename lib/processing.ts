@@ -217,12 +217,16 @@ export async function finalizeResume(
     method?: ExtractionMethod;
     structured?: StructuredExtraction;
     hybridFallback?: StructuredExtraction;
+    signal?: AbortSignal;
+    generation?: number;
   },
 ) {
   return transaction(db, async (tx) => {
+    provenance?.signal?.throwIfAborted();
     const result = await tx.resume.updateMany({
       where: {
         ...owned(id, token, await databaseNow(tx)),
+        ...(provenance?.generation !== undefined ? { processingGeneration: provenance.generation } : {}),
         extraction: { isNot: { reviewedAt: { not: null } } },
       },
       data: {
@@ -375,6 +379,7 @@ export async function finalizeResume(
       },
     });
     await reconcileBatch(tx, resume.batchId);
+    provenance?.signal?.throwIfAborted();
     return true;
   });
 }

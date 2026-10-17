@@ -75,7 +75,7 @@ export function CandidateHeader({ record, editable, downloadable, busy, refreshR
         {basic?.email ? <a href={"mailto:" + basic.email}>{basic.email}</a> : <span>Email not identified</span>}
         {basic?.phone ? <a href={"tel:" + basic.phone.replace(/\s/g, "")}>{basic.phone}</a> : <span>Phone not identified</span>}
       </div>
-      <div className="candidate-header-meta"><StatusBadge status={record.status} /><span title="Parsing reliability only; never a measure of candidate suitability.">Extraction confidence <strong>{basic ? Math.round(basic.overallConfidence * 100) + "%" : "unavailable"}</strong></span></div>
+      <div className="candidate-header-meta"><StatusBadge status={record.status} /><span title="Average confidence for name, email, phone and current designation. It does not measure employment, education, skills or extraction completeness.">Basic identity/title confidence <strong>{basic ? Math.round(basic.overallConfidence * 100) + "%" : "unavailable"}</strong></span></div>
     </div>
     <div className="candidate-header-actions">
       <div className="candidate-source-actions">{downloadable && <a className="button button-secondary" href={"/api/resumes/" + encodeURIComponent(record.id) + "/file"} target="_blank" rel="noopener noreferrer">View original {record.fileType.toUpperCase()}</a>}<button className="button button-secondary" disabled={busy} onClick={reload}>Reload candidate</button></div>

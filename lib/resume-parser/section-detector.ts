@@ -1,5 +1,8 @@
 import type { SourceLine } from "./text-normalizer";
 import { skillDictionary } from "./dictionaries/skills";
+import { stackedEmploymentHeader } from "./employment-header";
+import { jobTitle } from "./basic";
+import { dateRange } from "./validators/dates";
 export type Section =
   | "header"
   | "summary"
@@ -20,6 +23,7 @@ export type Section =
   | "unknown";
 export interface SectionLine extends SourceLine {
   section: Section;
+  skillFormat?: "competency";
 }
 export const headings: Record<
   Exclude<Section, "header" | "unknown">,
@@ -38,6 +42,9 @@ export const headings: Record<
   ],
   objective: ["objective", "career objective"],
   skills: [
+    "core strengths",
+    "key strengths",
+    "professional strengths",
     "skills",
     "technical skills",
     "core competencies",
@@ -65,8 +72,12 @@ export const headings: Record<
   education: [
     "education",
     "academic qualifications",
+    "academic qualification",
+    "academic credentials",
     "academic background",
     "educational qualifications",
+    "educational qualification",
+    "technical education",
     "learning",
   ],
   projects: [
@@ -149,26 +160,52 @@ export function heading(value: string): {
 }
 export function detectSections(lines: SourceLine[]): SectionLine[] {
   let current: Section = "header";
+  let ownedEmployment = false;
+  let skillFormat: "competency" | undefined;
   const lanes = new Map<number, Section>();
+  const competencyLanes = new Set<number>();
   const result: SectionLine[] = [];
-  for (const line of lines) {
+  for (const [index, line] of lines.entries()) {
     if (line.columnStart) {
       current = "header";
+      ownedEmployment = false;
       lanes.clear();
+      competencyLanes.clear();
     }
     if (/^I declare\b/i.test(line.text)) current = "unknown";
+    const inline = heading(line.text);
+    if (current === "employment") {
+      const previous = lines[index - 1];
+      const cells = line.text.split(/[|\t]/).map(v => v.trim());
+      const rowTitle = jobTitle(cells[0]);
+      if ((previous && previous.page === line.page && line.line === previous.line + 1 &&
+        stackedEmploymentHeader(previous.text, line.text)) ||
+        (cells.length >= 3 && rowTitle && cells[0].toLowerCase().startsWith(rowTitle.toLowerCase()) && dateRange(line.text) &&
+          !dateRange(cells[1]) && !/^(?:project|client)\s*:/i.test(cells[1]))) ownedEmployment = true;
+    }
+    if (current === "employment" && ownedEmployment && inline?.section === "projects" && inline.content) {
+      // Keep inline project summaries with their employer. Standalone section
+      // headings still end employment, including a standalone Projects heading.
+      result.push({ ...line, text: line.text.replace(/\t+/g, " | "), section: current });
+      continue;
+    }
     const cells = line.text.split(/\t+/);
     // Independent sections in aligned columns: remember each lane's heading.
     if (cells.length > 1 && cells.some((v) => heading(v))) {
       for (const [i, cell] of cells.entries()) {
         const h = heading(cell);
-        if (h) lanes.set(i, h.section);
+        if (h) {
+          lanes.set(i, h.section);
+          if (h.section === "skills" && /^(?:core|key|professional) strengths\b/i.test(cell)) competencyLanes.add(i);
+          else competencyLanes.delete(i);
+        }
         const content = h?.content ?? cell;
         if (content)
           result.push({
             ...line,
             text: content,
             section: lanes.get(i) ?? current,
+            ...(competencyLanes.has(i) ? { skillFormat: "competency" as const } : {}),
           });
       }
       continue;
@@ -180,6 +217,7 @@ export function detectSections(lines: SourceLine[]): SectionLine[] {
             ...line,
             text: cell.trim(),
             section: lanes.get(i) ?? current,
+            ...(competencyLanes.has(i) ? { skillFormat: "competency" as const } : {}),
           });
       });
       continue;
@@ -187,9 +225,12 @@ export function detectSections(lines: SourceLine[]): SectionLine[] {
     const h = heading(line.text);
     if (h) {
       current = h.section;
+      ownedEmployment = false;
+      skillFormat = h.section === "skills" && /^(?:core|key|professional) strengths\b/i.test(line.text) ? "competency" : undefined;
       lanes.clear();
+      competencyLanes.clear();
       if (h.content)
-        result.push({ ...line, text: h.content, section: current });
+        result.push({ ...line, text: h.content, section: current, ...(skillFormat ? { skillFormat } : {}) });
     } else if (
       /^[A-Z][A-Z &/]{2,40}:?$/.test(line.text) &&
       current !== "header" &&
@@ -198,7 +239,7 @@ export function detectSections(lines: SourceLine[]): SectionLine[] {
         line.text,
       ) &&
       !(
-        current === "skills" &&
+        current === "skills" && !skillFormat &&
         (/^\S{2,8}$/.test(line.text) || /^(?:auto cad|ms office)$/i.test(line.text) || /[&+#.]/.test(line.text)) &&
         !/^(?:hobbies|interests|activities)$/i.test(line.text)
       ) &&
@@ -206,7 +247,9 @@ export function detectSections(lines: SourceLine[]): SectionLine[] {
         [s.name, ...s.aliases].some(
           (v) => v.toLowerCase() === line.text.toLowerCase(),
         ),
-      )
+      ) &&
+      !(current === "employment" && lines[index + 1]?.page === line.page &&
+        stackedEmploymentHeader(line.text, lines[index + 1].text))
     ) {
       // An unknown heading is a boundary, not permission to spill into the prior section.
       current = "unknown";
@@ -219,6 +262,7 @@ export function detectSections(lines: SourceLine[]): SectionLine[] {
           ? line.text.replace(/^[-•*]\s*/, "").replace(/\s+I\s+/g, " | ").replace(/,\s*(?=[A-Za-z]+\s+\d{4}\s*(?:to|-))/, " | ").replace(/\t+/g, " | ")
           : line.text.replace(/\t+/g, " | "),
         section: current,
+        ...(current === "skills" && skillFormat ? { skillFormat } : {}),
       });
   }
   return result;

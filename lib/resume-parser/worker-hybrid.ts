@@ -1,3 +1,4 @@
+import { emitDiagnostic, observeRedisCommand } from "../runtime-diagnostics";
 import { randomUUID } from "node:crypto";
 import type Redis from "ioredis";
 import { extractHybridResume, type HybridResult } from "./hybrid";
@@ -38,6 +39,9 @@ export const HYBRID_SLOT = "resume:hybrid:v1:slot";
 export class RedisHybridAdmission implements HybridAdmission {
   constructor(private readonly redis: Redis) {}
   async acquire(identity: string) {
+    return observeRedisCommand("acquire", () => this.acquireObserved(identity));
+  }
+  private async acquireObserved(identity: string) {
     const token = randomUUID();
     const result = Number(
       await this.redis.eval(
@@ -57,8 +61,8 @@ export class RedisHybridAdmission implements HybridAdmission {
     return {
       priorState: result === 2 ? admissionMarkerState(await this.redis.get(`resume:hybrid:v1:attempt:${identity}`)) : undefined,
       transition: result === 1 ? async (state: HybridAttemptState) => {
-        const changed = await this.redis.eval("if redis.call('get', KEYS[1]) == ARGV[1] then redis.call('set', KEYS[2], ARGV[2]); return 1 end return 0",
-          2, HYBRID_SLOT, `resume:hybrid:v1:attempt:${identity}`, token, `v2:${state.toLowerCase()}:${token}`);
+        const changed = await observeRedisCommand("transition", () => this.redis.eval("if redis.call('get', KEYS[1]) == ARGV[1] then redis.call('set', KEYS[2], ARGV[2]); return 1 end return 0",
+          2, HYBRID_SLOT, `resume:hybrid:v1:attempt:${identity}`, token, `v2:${state.toLowerCase()}:${token}`));
         if (Number(changed) !== 1) throw new Error("HYBRID_ADMISSION_OWNERSHIP_LOST");
       } : undefined,
       outcome:
@@ -70,12 +74,12 @@ export class RedisHybridAdmission implements HybridAdmission {
       release:
         result === 1
           ? async () => {
-              await this.redis.eval(
+              await observeRedisCommand("release", () => this.redis.eval(
                 "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) end return 0",
                 1,
                 HYBRID_SLOT,
                 token,
-              );
+              ));
             }
           : undefined,
     };
@@ -130,10 +134,13 @@ export async function processWorkerHybrid(
   let phase = "selection", requestState = "NOT_STARTED", priorRequestState: string | undefined;
   let quarantined: boolean | undefined;
   let dispatched = 0, returnedRequests = 0;
-  const diagnostic = (event: string, error?: unknown) => console.info(JSON.stringify({ event,
+  const diagnostic = (event: string, error?: unknown) => {
+    emitDiagnostic("hybrid_lifecycle", { stage: phase, outcome, requestState, requests: Math.max(metrics.requests, dispatched, returnedRequests), quarantined, error });
+    console.info(JSON.stringify({ event,
     resumeId: context.resumeId, generation: context.generation, mode: config.mode, stage: phase,
     admissionOutcome: outcome, requestState, requests: Math.max(metrics.requests, dispatched, returnedRequests),
     ...(error === undefined ? {} : { error: safeProcessingError(error) }) }));
+  };
   const selected =
     (context.replay && config.mode === "shadow") ||
     (Number.isFinite(config.newAfter) &&

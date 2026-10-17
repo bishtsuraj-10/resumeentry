@@ -1,3 +1,4 @@
+import { emitDiagnostic, ollamaNumericTimings, withRequestDiagnostics } from "../runtime-diagnostics";
 import { z } from "zod";
 import { safeProcessingError } from "../processing-diagnostics";
 
@@ -161,19 +162,32 @@ export class NuExtractAdapter {
     budgetMs = this.config.timeoutMs,
     lifecycle?: NuRequestLifecycle,
   ): Promise<NuOutcome> {
+    return withRequestDiagnostics(() => this.extractObserved(target, source, signal, budgetMs, lifecycle));
+  }
+  private async extractObserved(target: NuTarget, source: string, signal: AbortSignal | undefined, budgetMs: number, lifecycle?: NuRequestLifecycle): Promise<NuOutcome> {
     const started = performance.now();
+    let serverTimings: Record<string, number> = {};
+    const requestSettings = {
+      requestTimeoutMs: this.config.timeoutMs, documentBudgetMs: this.config.documentBudgetMs,
+      contextTokens: this.config.contextTokens, outputTokens: this.config.outputTokens,
+      maxInputChars: this.config.maxInputChars, maxCalls: this.config.maxCalls, remainingBudgetMs: budgetMs,
+    };
     let invoked = false;
     let stage = "preflight";
     let httpStatus: number | undefined;
-    const failure = (reason: string, error?: unknown): NuOutcome => ({
-      ok: false,
-      invoked,
-      reason,
-      latencyMs: performance.now() - started,
-      stage,
-      httpStatus,
-      ...(error === undefined ? {} : { error: safeProcessingError(error) }),
-    });
+    const failure = (reason: string, error?: unknown): NuOutcome => {
+      const elapsedMs = performance.now() - started;
+      emitDiagnostic("ollama_request_finished", { ...requestSettings, ...serverTimings, target, stage, outcome: reason, invoked, clientElapsedMs: elapsedMs, httpStatus, aborted: reason === "ABORTED" || reason === "TIMEOUT", error });
+      return {
+        ok: false,
+        invoked,
+        reason,
+        latencyMs: elapsedMs,
+        stage,
+        httpStatus,
+        ...(error === undefined ? {} : { error: safeProcessingError(error) }),
+      };
+    };
     if (!this.config.enabled) return failure("DISABLED");
     if (busy) return failure("BUSY");
     const limit = Math.min(
@@ -278,6 +292,7 @@ export class NuExtractAdapter {
       }
       stage = "response_validation";
       const envelope = JSON.parse(Buffer.concat(parts).toString("utf8"));
+      serverTimings = ollamaNumericTimings(envelope);
       if (envelope.done !== true || envelope.done_reason === "length")
         return failure("TRUNCATED_RESPONSE");
       if (typeof envelope.response !== "string")
@@ -289,11 +304,13 @@ export class NuExtractAdapter {
         decoded,
       );
       if (!parsed.success) return failure("SCHEMA_REJECTED");
+      const latencyMs = performance.now() - started;
+      emitDiagnostic("ollama_request_finished", { ...requestSettings, ...serverTimings, target, stage: "complete", outcome: "success", invoked, clientElapsedMs: latencyMs, httpStatus });
       return {
         ok: true,
         invoked,
         data: parsed.data,
-        latencyMs: performance.now() - started,
+        latencyMs,
         inputTokens: envelope.prompt_eval_count,
         outputTokens: envelope.eval_count,
       };
