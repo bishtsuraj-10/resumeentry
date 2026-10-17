@@ -2,6 +2,7 @@ export interface SourceLine {
   text: string;
   line: number;
   page: number;
+  columnStart?: boolean;
 }
 function wrappedPlace(previous: string, next: string) {
   if (!/,|^(?:location|address|based in)\s*:/i.test(previous)) return false;
@@ -17,7 +18,12 @@ export function normalizeText(text: string): SourceLine[] {
   let page = 1;
   let pageLine = 0;
   const lines: SourceLine[] = [];
+  let columnStart = false;
   for (const [index, raw] of text.split(/\r?\n/).entries()) {
+    if (raw === "\v") {
+      columnStart = true;
+      continue;
+    }
     if (raw.includes("\f")) {
       page += (raw.match(/\f/g) ?? []).length;
       pageLine = 0;
@@ -47,20 +53,27 @@ export function normalizeText(text: string): SourceLine[] {
     )
       continue;
     const previous = lines[lines.length - 1];
+    if (previous?.page === page && /^other personal$/i.test(previous.text) && /^details$/i.test(value)) {
+      previous.text += " " + value;
+      continue;
+    }
     if (
-      previous?.page === page &&
+      !columnStart && previous?.page === page &&
       wrappedPlace(previous.text, value)
     )
       previous.text += " " + value;
     else if (
-      previous?.page === page &&
+      !columnStart && previous?.page === page &&
       /^https?:\/\/\S+$/i.test(previous.text) &&
       /^[a-z0-9/_~.%+-]+$/.test(value) &&
       (/[\/.-]/.test(value) || /[\/.-]$/.test(previous.text)) &&
       !/^\d+$/.test(value)
     ) {
       previous.text += value;
-    } else lines.push({ text: value, line: index + 1, page });
+    } else {
+      lines.push({ text: value, line: index + 1, page, ...(columnStart ? { columnStart: true } : {}) });
+      columnStart = false;
+    }
   }
   return lines;
 }

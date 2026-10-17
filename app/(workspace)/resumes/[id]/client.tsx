@@ -461,11 +461,12 @@ export default function ResumeDetail({ id }: { id: string }) {
                   <Empty>No career objective identified.</Empty>
                 )}
                 <p>
-                  Machine extraction confidence:{" "}
+                  Basic identity/title confidence:{" "}
                   {b
                     ? `${Math.round(b.overallConfidence * 100)}%`
                     : "Not available"}
                   . {b?.requiresReview ? "Review required." : ""}
+                  {" "}This score covers name, email, phone and designation; other sections need independent review.
                 </p>
                 {editor(
                   "profile",

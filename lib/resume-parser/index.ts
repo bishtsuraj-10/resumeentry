@@ -12,7 +12,8 @@ import { extractLinks } from "./extractors/profile-links";
 import { experienceMonths } from "./validators/dates";
 import { evidence, type MachineEvidence } from "./field-confidence";
 import type { ResumeExtraction } from "./basic";
-export const PARSER_VERSION = "local-comprehensive-v1.2";
+import { suspiciousTargets } from "./suspicious";
+export const PARSER_VERSION = "local-comprehensive-v1.6.0-experimental";
 export interface StructuredExtraction {
   basic: ResumeExtraction;
   candidate: Omit<CandidatePatch, "expectedRevision">;
@@ -44,7 +45,7 @@ export function extractStructuredResume(
     ...records.evidence,
     ...links.evidence,
   ];
-  if (profile.totalExperienceMonths == null) {
+  if (profile.totalExperienceMonths == null && !professional.hasQualifiedExperience) {
     const months = records.warnings.some((w) =>
       ["UNRESOLVED_EMPLOYMENT", "UNCERTAIN_EMPLOYER"].includes(w),
     )
@@ -86,6 +87,8 @@ export function extractStructuredResume(
     ...assessTextQuality(text).warnings,
     ...(options.documentWarnings ?? []),
     ...records.warnings,
+    ...links.warnings,
+    ...skills.warnings,
   ];
   if (
     identity.evidence.some((e) =>
@@ -170,7 +173,7 @@ export function extractStructuredResume(
         : proof.fieldPath;
     return { ...proof, fieldPath };
   });
-  return {
+  const result: StructuredExtraction = {
     basic,
     candidate,
     evidence: finalProofs.slice(0, 1500),
@@ -178,4 +181,14 @@ export function extractStructuredResume(
     durationMs: performance.now() - started,
     parserVersion: PARSER_VERSION,
   };
+  if (
+    result.candidate.profile?.summary &&
+    /^(?:project(?: name| title| description)?|client)\s*:/im.test(
+      result.candidate.profile.summary,
+    )
+  )
+    result.warnings.push("AMBIGUOUS_SUMMARY_OWNERSHIP");
+  if (suspiciousTargets(result).length)
+    result.warnings.push("SUSPICIOUS_EXTRACTION");
+  return result;
 }

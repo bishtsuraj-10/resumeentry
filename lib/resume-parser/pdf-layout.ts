@@ -116,7 +116,8 @@ export async function readPdfLayout(
               items: r.items.filter((i) => (left ? i.x < split : i.x >= split)),
             }))
             .filter((r) => r.items.length);
-        orderedRows = [...header, ...lane(true), ...lane(false), ...footer];
+        // A vertical tab carries a column boundary without inventing source text.
+        orderedRows = [...header, ...lane(true), { y: 0, items: [{ x: 0, width: 0, text: "\v" }] }, ...lane(false), ...footer];
       }
       // Resolve clickable labels at their original position so section ownership
       // survives column ordering. Never append unplaced destinations to the header.

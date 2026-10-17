@@ -1,7 +1,9 @@
 import { skillDictionary } from "../dictionaries/skills";
 import { evidence, type MachineEvidence } from "../field-confidence";
 import type { SectionLine } from "../section-detector";
+import { contaminatedSkill, industrialAws } from "../suspicious";
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const competencyBullet = /^[-•*●▪\uF076\uF0B7]\s*/;
 const patterns = skillDictionary.map((skill) => ({
   skill,
   regex: new RegExp(
@@ -24,6 +26,7 @@ export function extractSkills(lines: SectionLine[]) {
     }
   >();
   const proofs: MachineEvidence[] = [];
+  const warnings: string[] = [];
   const explicit = lines.filter(
     (l) =>
       l.section === "skills" ||
@@ -32,32 +35,66 @@ export function extractSkills(lines: SectionLine[]) {
           l.text,
         )),
   );
-  const groups =
-    explicit.some((l) => /[,;]|\s\/\s/.test(l.text)) &&
-    explicit.every((l) => l.section === "skills")
-      ? [{ ...explicit[0], text: explicit.map((l) => l.text).join(" ") }]
-      : explicit;
+  const groups: (SectionLine & { lastLine: number })[] = [];
+  const coveredCompetencies = new Set<string>();
+  for (const line of explicit) {
+    const previous = groups[groups.length - 1];
+    if (line.skillFormat === "competency" && previous?.skillFormat === "competency" &&
+      previous.page === line.page && line.line === previous.lastLine + 1 &&
+      competencyBullet.test(previous.text) && !competencyBullet.test(line.text)) {
+      previous.text += " " + line.text;
+      previous.lastLine = line.line;
+    } else groups.push({ ...line, lastLine: line.line });
+  }
   for (const line of groups)
-    for (const raw of line.text
+    for (const raw of (line.skillFormat === "competency" && competencyBullet.test(line.text) ? [line.text] : line.text
       .replace(
         /^(?:technolog(?:y|ies)|methods\s*\/\s*tools|tools|skills)\s*:\s*/i,
         "",
       )
-      .split(/[,;|]|\s+\/\s+/)) {
-      const value = raw.trim();
+      // A spaced list slash can touch a PDF line boundary. Preserve compact
+      // terms such as CI/CD while excluding the orphan delimiter from skills.
+      .split(/[,;|]|\s+\/(?:\s+|$)|^\/\s+/))) {
+      const value = raw.replace(line.skillFormat === "competency" ? competencyBullet : /^\s*[-•*]\s*/, "").trim();
+      if (contaminatedSkill(value)) {
+        warnings.push("SKILL_CONTAMINATION");
+        proofs.push(
+          evidence("observed.skills", line, ["SKILL_CONTAMINATION"], 0),
+        );
+        continue;
+      }
+      if (
+        /\b(?:responsible for|worked on|project description|address\s*:)\b/i.test(
+          value,
+        )
+      )
+        warnings.push("SKILL_CONTAMINATION");
+      const welding = industrialAws(line.text);
+      if (welding) warnings.push("AMBIGUOUS_AWS_CONTEXT");
+      if (welding && /^AWS$/i.test(value)) {
+        proofs.push(
+          evidence("observed.skills", line, ["AMBIGUOUS_AWS_CONTEXT"], 0),
+        );
+        continue;
+      }
       if (
         !value ||
         value.length > 120 ||
-        value.split(/\s+/).length > 8 ||
+        value.split(/\s+/).length > (line.skillFormat === "competency" ? 20 : 8) ||
         /[!?]|\.$/.test(value)
       )
         continue;
-      const known = skillDictionary.find((s) =>
-        [s.name, ...s.aliases].some(
-          (v) => v.toLowerCase() === value.toLowerCase(),
-        ),
-      );
+      const known =
+        welding && /^AWS\b/i.test(value)
+          ? undefined
+          : skillDictionary.find((s) =>
+              [s.name, ...s.aliases].some(
+                (v) => v.toLowerCase() === value.toLowerCase(),
+              ),
+            );
       const name = known?.name ?? value;
+      if (line.skillFormat === "competency" && competencyBullet.test(line.text))
+        for (let ordinal = line.line; ordinal <= line.lastLine; ordinal++) coveredCompetencies.add(`${line.page}:${ordinal}`);
       if (!skills.has(name))
         skills.set(name, {
           name,
@@ -78,6 +115,9 @@ export function extractSkills(lines: SectionLine[]) {
         );
     }
   for (const line of lines) {
+    // One accepted competency bullet is one source-supported skill; avoid
+    // appending redundant dictionary fragments of that same statement.
+    if (line.skillFormat === "competency" && coveredCompetencies.has(`${line.page}:${line.line}`)) continue;
     if (
       !["skills", "projects", "employment", "internships", "summary"].includes(
         line.section,
@@ -94,6 +134,20 @@ export function extractSkills(lines: SectionLine[]) {
       )
         continue;
       for (const match of line.text.matchAll(regex)) {
+        if (match[0].toUpperCase() === "AWS" && industrialAws(line.text)) {
+          warnings.push("AMBIGUOUS_AWS_CONTEXT");
+          proofs.push(
+            evidence("observed.skills", line, ["AMBIGUOUS_AWS_CONTEXT"], 0),
+          );
+          continue;
+        }
+        // CRM also denotes cold rolling mills in industrial resumes.
+        if (
+          match[0].toUpperCase() === "CRM" &&
+          /\b(?:mills?|rolling|steel)\b/i.test(line.text) &&
+          !/\b(?:customer|sales|relationship)\b/i.test(line.text)
+        )
+          continue;
         // JS/TS/R abbreviations require explicit skills/tool context and original capitals.
         if (
           ["js", "ts", "r"].includes(match[0].toLowerCase()) &&
@@ -131,5 +185,17 @@ export function extractSkills(lines: SectionLine[]) {
   return {
     items: [...skills.values()].slice(0, 100),
     evidence: proofs.slice(0, 300),
+    warnings: [
+      ...new Set([
+        ...warnings,
+        ...(explicit.some(
+          (l) =>
+            /\|/.test(l.text) &&
+            /\b(?:and|with|using|of|to)\b|\w-\s*\|/i.test(l.text),
+        )
+          ? ["AMBIGUOUS_SKILL_LAYOUT"]
+          : []),
+      ]),
+    ],
   };
 }

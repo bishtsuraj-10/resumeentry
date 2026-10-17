@@ -12,7 +12,18 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:hybrid": "node scripts/check-hybrid.cjs",
+    "test:extraction-quality": "node scripts/check-extraction-quality.cjs",
+    "test:student-extraction": "node scripts/check-student-extraction.cjs",
+    "test:extraction-reliability": "node scripts/check-extraction-reliability.cjs",
+    "eval:extraction": "node scripts/evaluate-extraction.cjs",
+    "test:hybrid-quality": "node scripts/check-hybrid-quality.cjs",
+    "eval:hybrid": "node scripts/evaluate-hybrid.cjs",
+    "test:worker-hybrid": "node scripts/check-worker-hybrid.cjs",
+    "test:hybrid-retries": "node scripts/check-hybrid-retries.cjs",
+    "eval:worker-hybrid": "node scripts/replay-worker-hybrid.cjs",
+    "cleanup:resumes:local": "node scripts/cleanup-local-resumes.cjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",

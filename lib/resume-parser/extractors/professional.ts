@@ -1,9 +1,19 @@
 import type { SectionLine } from "../section-detector";
-import { extractResumeFields } from "../basic";
+import { jobTitle } from "../basic";
+import { dateRange } from "../validators/dates";
 import { evidence, type MachineEvidence } from "../field-confidence";
 export function extractProfessional(lines: SectionLine[]) {
   const profile: Record<string, unknown> = {};
   const proofs: MachineEvidence[] = [];
+  let hasQualifiedExperience = false;
+  for (const line of lines.filter(l => l.section === "header" || l.section === "summary")) {
+    const claim = line.text.match(/(?:(?:over|about|approximately|at least|more than)\s+)?\d+(?:\.\d+)?\s*\+?\s*years?(?:\s+(?:and\s+)?\d+\s*months?)?\s+(?:of\s+)?(?:professional |work |total |overall )?experience/i);
+    if (!claim || !/^(?:over|about|approximately|at least|more than)\b|\d\s*\+/i.test(claim[0]) ||
+      /\b(?:team|company|organization|requires?|requiring|combined)\b/i.test(line.text.slice(0, claim.index))) continue;
+    hasQualifiedExperience = true;
+    proofs.push({ ...evidence("observed.profile.experienceClaim", line,
+      ["EXPLICIT_DURATION_CLAIM", /\+|^(?:over|at least|more than)\b/i.test(claim[0]) ? "LOWER_BOUND" : "APPROXIMATE"], 0.9), text: claim[0] });
+  }
   for (const [section, key] of [
     ["summary", "summary"],
     ["objective", "objective"],
@@ -23,18 +33,72 @@ export function extractProfessional(lines: SectionLine[]) {
       );
     }
   }
-  const safe = lines.filter((l) => {
-    if (!["header", "summary", "employment"].includes(l.section)) return false;
-    if (l.section !== "summary") return true;
-    // A leading self-description can state a role; mentioning a colleague or
-    // desired role later in a summary does not establish the candidate's title.
-    const title = extractResumeFields(l.text).designation;
-    return Boolean(title && l.text.toLowerCase().startsWith(title.toLowerCase()));
+  const titles = lines.flatMap((line, index) => {
+    if (!["header", "summary", "employment"].includes(line.section)) return [];
+    if (
+      /^(?:client|reference|recruiter|desired|seeking|reporting to|as|worked as)\b|^project\s*(?:name|title)?\s*:/i.test(
+        line.text,
+      ) ||
+      /\bchartered engineer\b/i.test(line.text)
+    )
+      return [];
+    const firstTitle = jobTitle(line.text);
+    const timelineTitle = line.section === "employment" && line.text.includes("|") &&
+      !(firstTitle && line.text.toLowerCase().startsWith(firstTitle.toLowerCase()))
+      ? line.text.split(/\s*\|\s*/)[1] : undefined;
+    const title = jobTitle(timelineTitle ?? line.text);
+    const owned = line.text.replace(
+      /^(?:designation|job title|role)\s*:\s*/i,
+      "",
+    );
+    // A dictionary mention in a responsibility is not the candidate's title.
+    if (!title || !(timelineTitle ?? owned).toLowerCase().replace(/\s*-\s*/g, " - ").startsWith(title.toLowerCase()))
+      return [];
+    const next = lines[index + 1];
+    const dates =
+      dateRange(line.text) ??
+      (next?.section === line.section ? dateRange(next.text) : null);
+    if (
+      line.section === "employment" &&
+      !dates &&
+      !/^(?:designation|job title|role)\s*:/i.test(line.text)
+    )
+      return [];
+    const score =
+      line.section === "employment" && dates?.isCurrent
+        ? 10000
+        : line.section === "header"
+          ? 5000 - index
+          : line.section === "employment" && dates?.endDate?.year
+            ? dates.endDate.year
+            : 0;
+    return [{ line, title, score }];
   });
-  const designation = extractResumeFields(safe.map((l) => l.text).join("\n"));
-  const headerTitle = lines.find(
-    (l) => l.section === "header" && extractResumeFields(l.text).designation,
-  );
+  let selected: (typeof titles)[number] | undefined = titles.sort(
+    (a, b) => b.score - a.score,
+  )[0];
+  if (
+    selected?.score < 10000 &&
+    lines.some(
+      (l) =>
+        l.section === "employment" &&
+        /\b(?:present|current|now|till date)\b/i.test(l.text),
+    )
+  )
+    selected = undefined;
+  // Keep an explicitly stated header specialty when it extends the current role.
+  const specificHeader = titles.find((t) => t.line.section === "header" && selected &&
+    t.title.toLowerCase().startsWith(selected.title.toLowerCase() + " - "));
+  if (specificHeader) selected = specificHeader;
+  const designation = {
+    designation: selected?.title ?? null,
+    designationConfidence: selected
+      ? selected.score >= 1000
+        ? 0.92
+        : 0.66
+      : 0,
+  };
+  const headerTitle = titles.find((t) => t.line.section === "header")?.line;
   if (headerTitle) {
     profile.headline = headerTitle.text.slice(0, 500);
     proofs.push(
@@ -42,9 +106,7 @@ export function extractProfessional(lines: SectionLine[]) {
     );
   }
   if (designation.designation) {
-    const line = safe.find((l) =>
-      l.text.toLowerCase().includes(designation.designation!.toLowerCase()),
-    );
+    const line = selected?.line;
     if (line)
       proofs.push(
         evidence(
@@ -92,7 +154,7 @@ export function extractProfessional(lines: SectionLine[]) {
       );
     if (
       duration &&
-      !/\b(over|about|approximately|at least)\b|\d\s*\+/.test(
+      !/\b(over|about|approximately|at least|more than)\b|\d\s*\+/.test(
         line.text.toLowerCase(),
       )
     ) {
@@ -111,6 +173,7 @@ export function extractProfessional(lines: SectionLine[]) {
     }
   }
   return {
+    hasQualifiedExperience,
     profile,
     designation: designation.designation,
     designationConfidence: designation.designationConfidence,

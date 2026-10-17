@@ -52,6 +52,8 @@ export function actualField(
   result: StructuredExtraction,
   path: string,
 ): unknown {
+  if (path === "experience.claims")
+    return result.evidence.filter(e => e.signals.includes("EXPLICIT_DURATION_CLAIM")).map(e => e.text);
   if (path.startsWith("basic."))
     return result.basic[path.slice(6) as keyof typeof result.basic];
   if (path.startsWith("profile."))
